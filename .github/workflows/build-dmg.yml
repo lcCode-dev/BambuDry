@@ -1,0 +1,372 @@
+# Builds, signs, notarizes, and packages BambuDry.app as a distributable .dmg
+# on every push to main. Tag pushes (v*) also attach the .dmg to a GitHub
+# Release. Manual runs are supported via the workflow_dispatch trigger.
+#
+# Required repository secrets — every signed build needs all five:
+#
+#   BAMBUDRY_TEAM_ID                  Apple Developer team ID (10 chars)
+#   BAMBUDRY_CERTIFICATE_P12_BASE64   Developer ID Application cert exported
+#                                     from Keychain Access as a .p12, then:
+#                                       base64 -i cert.p12 | pbcopy
+#   BAMBUDRY_CERTIFICATE_PASSWORD     Password used when exporting the .p12
+#
+# Notarization uses an App Store Connect API key (more reliable than the
+# Apple-ID + app-specific-password method). Generate one at:
+#   https://appstoreconnect.apple.com → Users and Access → Integrations
+#   → App Store Connect API → click + → Access: at minimum "Developer".
+# You only see the .p8 file once at creation — download it immediately.
+#
+#   BAMBUDRY_NOTARY_KEY_ID            10-character key ID (e.g. ABCD123456)
+#   BAMBUDRY_NOTARY_ISSUER_ID         Issuer ID (UUID, shown above the key list)
+#   BAMBUDRY_NOTARY_KEY_P8_BASE64     base64 of AuthKey_<KEY_ID>.p8 contents:
+#                                       base64 -i AuthKey_*.p8 | pbcopy
+#
+# Add these under: Repo → Settings → Secrets and variables → Actions.
+
+name: Build .dmg
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # required for attaching the .dmg to a GitHub Release
+
+concurrency:
+  group: build-dmg-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-dmg:
+    # macos-15 carries Xcode 16.x by default. Bumping from macos-14 (Xcode
+    # 15.4) was forced by the project file format produced locally — Xcode
+    # 16+ writes objectVersion 77, which 15.4 cannot read.
+    runs-on: macos-15
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: macos
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify required secrets are set
+        env:
+          TEAM_ID: ${{ secrets.BAMBUDRY_TEAM_ID }}
+          CERT_BASE64: ${{ secrets.BAMBUDRY_CERTIFICATE_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.BAMBUDRY_CERTIFICATE_PASSWORD }}
+          NOTARY_KEY_ID: ${{ secrets.BAMBUDRY_NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.BAMBUDRY_NOTARY_ISSUER_ID }}
+          NOTARY_KEY_P8_BASE64: ${{ secrets.BAMBUDRY_NOTARY_KEY_P8_BASE64 }}
+        run: |
+          missing=()
+          [ -z "$TEAM_ID" ]              && missing+=("BAMBUDRY_TEAM_ID")
+          [ -z "$CERT_BASE64" ]          && missing+=("BAMBUDRY_CERTIFICATE_P12_BASE64")
+          [ -z "$CERT_PASSWORD" ]        && missing+=("BAMBUDRY_CERTIFICATE_PASSWORD")
+          [ -z "$NOTARY_KEY_ID" ]        && missing+=("BAMBUDRY_NOTARY_KEY_ID")
+          [ -z "$NOTARY_ISSUER_ID" ]     && missing+=("BAMBUDRY_NOTARY_ISSUER_ID")
+          [ -z "$NOTARY_KEY_P8_BASE64" ] && missing+=("BAMBUDRY_NOTARY_KEY_P8_BASE64")
+          if [ ${#missing[@]} -ne 0 ]; then
+            echo "::error::Missing required secrets: ${missing[*]}"
+            echo "::error::See the comment block at the top of .github/workflows/build-dmg.yml for setup instructions."
+            exit 1
+          fi
+          echo "All six signing/notary secrets are present."
+
+      - name: Install build tools
+        run: brew install --quiet xcodegen create-dmg
+
+      - name: Select latest stable Xcode
+        # Xcodegen writes a project format tied to whatever Xcode it sees;
+        # the runner's pre-installed Xcode must be ≥ the one used locally.
+        # `latest-stable` resolves to the newest non-beta Xcode the runner
+        # has on disk, which tracks Apple releases as runner images update.
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Log toolchain versions
+        run: |
+          echo "Xcode:    $(xcode-select -p)"
+          xcodebuild -version
+          echo "Swift:    $(swift --version | head -1)"
+          echo "xcodegen: $(xcodegen --version)"
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Import code signing certificate
+        env:
+          CERT_BASE64: ${{ secrets.BAMBUDRY_CERTIFICATE_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.BAMBUDRY_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain"
+          KEYCHAIN_PWD=$(uuidgen)
+          CERT_PATH="$RUNNER_TEMP/cert.p12"
+
+          echo "$CERT_BASE64" | base64 --decode -o "$CERT_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
+
+          # Make this keychain searchable in addition to the user's existing
+          # keychains. Each `security list-keychains` line is one path; read
+          # them into an array and expand quoted so paths with spaces survive.
+          existing=()
+          while IFS= read -r line; do
+            line="${line//\"/}"
+            line="${line## }"
+            [ -n "$line" ] && existing+=("$line")
+          done < <(security list-keychains -d user)
+          security list-keychains -d user -s "$KEYCHAIN_PATH" "${existing[@]}"
+
+          rm -f "$CERT_PATH"
+
+      - name: Decode notary API key
+        # The .p8 contents are stored base64-encoded in a secret so they
+        # survive transit through Actions. Decode to a temp path that
+        # subsequent notarytool steps reference via $NOTARY_KEY_PATH.
+        env:
+          KEY_BASE64: ${{ secrets.BAMBUDRY_NOTARY_KEY_P8_BASE64 }}
+        run: |
+          KEY_PATH="$RUNNER_TEMP/notary.p8"
+          echo "$KEY_BASE64" | base64 --decode -o "$KEY_PATH"
+          chmod 600 "$KEY_PATH"
+          # Sanity-check the decoded file looks like a PEM EC private key.
+          if ! head -1 "$KEY_PATH" | grep -q "BEGIN PRIVATE KEY"; then
+            echo "::error::Decoded BAMBUDRY_NOTARY_KEY_P8_BASE64 doesn't begin with '-----BEGIN PRIVATE KEY-----'. Re-check the secret was set to: base64 -i AuthKey_<KEY_ID>.p8"
+            exit 1
+          fi
+          echo "NOTARY_KEY_PATH=$KEY_PATH" >> "$GITHUB_ENV"
+
+      - name: Resolve signing identity
+        id: identity
+        # Friendly cert names vary across Apple's eras (older certs are
+        # "Mac Developer ID Application: <Name>", newer ones drop the "Mac"
+        # prefix). Using the SHA-1 fingerprint avoids that fragility — it
+        # uniquely identifies the cert + key pair regardless of label.
+        env:
+          KEYCHAIN_PATH: ${{ runner.temp }}/build.keychain
+        run: |
+          echo "Identities visible to xcodebuild from our temp keychain:"
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
+          # Sanity-check that the .p12 included a private key, not just
+          # the certificate — by far the most common cause of '0 valid
+          # identities found' is exporting the cert without the key.
+          if ! security find-identity -v -p codesigning "$KEYCHAIN_PATH" \
+               | grep -q "Developer ID Application"; then
+            echo
+            echo "::error title=Signing identity not found::No 'Developer ID Application' identity is visible in the temp keychain. Almost always this means the .p12 stored in BAMBUDRY_CERTIFICATE_P12_BASE64 contains the certificate but NOT its private key."
+            echo "::error::Re-export from Keychain Access → 'My Certificates' (not 'Certificates'). Click the ▶ disclosure triangle on your Developer ID Application entry to confirm a private key is shown beneath it. Right-click the parent row (the menu should read 'Export 2 items…'), save as .p12, then base64-encode and update the BAMBUDRY_CERTIFICATE_P12_BASE64 secret."
+            exit 1
+          fi
+
+          # `find-identity` lines look like:
+          #     1) ABCDEF1234…  "Developer ID Application: Name (TEAMID)"
+          # …so the second whitespace-separated token is the 40-char SHA-1
+          # hex. xcodebuild accepts the hash directly as CODE_SIGN_IDENTITY,
+          # sidestepping any name-matching.
+          SHA=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" \
+                | grep -E "Developer ID Application" \
+                | head -1 \
+                | awk '{print $2}')
+          if [[ ! "$SHA" =~ ^[0-9A-F]{40}$ ]]; then
+            echo "::error::Failed to parse SHA-1 from find-identity output. Got: '$SHA'"
+            exit 1
+          fi
+          echo "Using signing identity SHA-1: $SHA"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Archive (Release config, Developer ID signing)
+        env:
+          TEAM_ID: ${{ secrets.BAMBUDRY_TEAM_ID }}
+          IDENTITY_SHA: ${{ steps.identity.outputs.sha }}
+        # Manual signing (not automatic) — automatic mode requires a logged-in
+        # Apple Developer account in Xcode to resolve the identity. CI has
+        # only the cert in a temp keychain, so we tell xcodebuild explicitly
+        # which identity to use, by SHA-1 hash. Developer ID distribution
+        # doesn't use provisioning profiles, so none are needed here.
+        run: |
+          xcodebuild \
+            -project BambuDryApp.xcodeproj \
+            -scheme BambuDryApp \
+            -configuration Release \
+            -destination "platform=macOS" \
+            -archivePath build/BambuDry.xcarchive \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="$IDENTITY_SHA" \
+            archive
+
+      - name: Export signed .app
+        env:
+          TEAM_ID: ${{ secrets.BAMBUDRY_TEAM_ID }}
+          IDENTITY_SHA: ${{ steps.identity.outputs.sha }}
+        run: |
+          cat > build/ExportOptions.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>developer-id</string>
+            <key>teamID</key>
+            <string>$TEAM_ID</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>signingCertificate</key>
+            <string>$IDENTITY_SHA</string>
+          </dict>
+          </plist>
+          EOF
+          xcodebuild -exportArchive \
+            -archivePath build/BambuDry.xcarchive \
+            -exportPath build/export \
+            -exportOptionsPlist build/ExportOptions.plist
+
+      - name: Notarize and staple .app
+        env:
+          KEY_ID: ${{ secrets.BAMBUDRY_NOTARY_KEY_ID }}
+          ISSUER_ID: ${{ secrets.BAMBUDRY_NOTARY_ISSUER_ID }}
+        run: |
+          ditto -c -k --keepParent build/export/BambuDry.app build/notary.zip
+          xcrun notarytool submit build/notary.zip \
+            --key "$NOTARY_KEY_PATH" \
+            --key-id "$KEY_ID" \
+            --issuer "$ISSUER_ID" \
+            --wait
+          xcrun stapler staple build/export/BambuDry.app
+          rm build/notary.zip
+
+      - name: Resolve version + .dmg name
+        id: meta
+        run: |
+          VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" BambuDryApp/Info.plist)
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          DMG_NAME="BambuDry-${VERSION}-${SHORT_SHA}.dmg"
+          {
+            echo "version=$VERSION"
+            echo "dmg_name=$DMG_NAME"
+            echo "dmg_path=macos/build/${DMG_NAME}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build .dmg
+        run: |
+          mkdir -p build/dmg-staging
+          cp -R build/export/BambuDry.app build/dmg-staging/
+
+          create-dmg \
+            --volname "BambuDry" \
+            --window-size 540 380 \
+            --icon-size 128 \
+            --icon "BambuDry.app" 140 200 \
+            --hide-extension "BambuDry.app" \
+            --app-drop-link 400 200 \
+            --no-internet-enable \
+            "build/${{ steps.meta.outputs.dmg_name }}" \
+            "build/dmg-staging/"
+
+      - name: Sign .dmg
+        # create-dmg produces an unsigned image. Without a signature on the
+        # outer DMG, Gatekeeper rejects it as "no usable signature" even
+        # though the .app inside is signed + notarized. Sign with the same
+        # Developer ID identity used for the app.
+        env:
+          IDENTITY_SHA: ${{ steps.identity.outputs.sha }}
+        run: |
+          codesign \
+            --force \
+            --sign "$IDENTITY_SHA" \
+            --timestamp \
+            "build/${{ steps.meta.outputs.dmg_name }}"
+          codesign -dvv "build/${{ steps.meta.outputs.dmg_name }}"
+
+      - name: Notarize and staple .dmg
+        env:
+          KEY_ID: ${{ secrets.BAMBUDRY_NOTARY_KEY_ID }}
+          ISSUER_ID: ${{ secrets.BAMBUDRY_NOTARY_ISSUER_ID }}
+        run: |
+          xcrun notarytool submit "build/${{ steps.meta.outputs.dmg_name }}" \
+            --key "$NOTARY_KEY_PATH" \
+            --key-id "$KEY_ID" \
+            --issuer "$ISSUER_ID" \
+            --wait
+          xcrun stapler staple "build/${{ steps.meta.outputs.dmg_name }}"
+
+      - name: Validate stapled notarization ticket
+        # `spctl --type install` is for .pkg installers and gives spurious
+        # "no usable signature" errors on .dmg even when correctly signed
+        # and stapled. `stapler validate` is the canonical post-staple
+        # check: confirms the ticket attached + matches the notary record.
+        run: xcrun stapler validate "build/${{ steps.meta.outputs.dmg_name }}"
+
+      - name: Upload .dmg as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BambuDry-dmg
+          path: ${{ steps.meta.outputs.dmg_path }}
+          retention-days: 90
+
+      # Rolling "Latest build" pre-release: every push to main moves the
+      # `latest` tag to the new commit and refreshes the attached .dmg.
+      # Marked as a pre-release (and make_latest=false) so this rolling
+      # build never displaces a tagged stable release in the GitHub UI.
+      - name: Move 'latest' tag to current commit
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          git tag -f latest
+          git push -f origin latest
+
+      - name: Purge stale assets from rolling release
+        # softprops/action-gh-release only clobbers same-named files. Since
+        # the .dmg name embeds the commit SHA, each push appends rather than
+        # replaces. Wipe all existing assets first so the rolling release
+        # always shows exactly one .dmg — the one matching the current SHA.
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release view latest --repo "$GITHUB_REPOSITORY" \
+              --json assets --jq '.assets[].name' \
+              | while read -r asset; do
+                  echo "Deleting stale asset: $asset"
+                  gh release delete-asset latest "$asset" \
+                    --repo "$GITHUB_REPOSITORY" --yes
+                done
+          else
+            echo "No prior 'latest' release; nothing to purge."
+          fi
+
+      - name: Update rolling 'Latest build' pre-release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "Latest build (from main)"
+          prerelease: true
+          make_latest: false
+          files: ${{ steps.meta.outputs.dmg_path }}
+          body: |
+            Auto-built from the most recent commit on `main`.
+
+            **Commit:** [`${{ github.sha }}`](https://github.com/${{ github.repository }}/commit/${{ github.sha }})
+            **Message:** ${{ github.event.head_commit.message }}
+
+            Replaced on every push. For pinned versions, see the tagged releases below.
+
+      # Versioned release: pushed when a `v*` tag is created, attaches the
+      # same .dmg to a permanent release with auto-generated notes.
+      - name: Attach .dmg to versioned release (tag pushes only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.meta.outputs.dmg_path }}
+          generate_release_notes: true

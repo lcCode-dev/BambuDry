@@ -1,0 +1,50 @@
+name: BambuDryApp
+options:
+  bundleIdPrefix: dev.lcCode
+  deploymentTarget:
+    macOS: "13.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: false
+
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+    MACOSX_DEPLOYMENT_TARGET: "13.0"
+    DEAD_CODE_STRIPPING: YES
+    GENERATE_INFOPLIST_FILE: NO
+    PRODUCT_BUNDLE_IDENTIFIER: dev.lcCode.BambuDry
+    PRODUCT_NAME: BambuDry
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: ""             # filled in by Xcode "Signing & Capabilities"
+    ENABLE_HARDENED_RUNTIME: YES
+    SWIFT_OPTIMIZATION_LEVEL_DEBUG: -Onone
+
+packages:
+  BambuDryCore:
+    path: "."
+
+targets:
+  BambuDryApp:
+    type: application
+    platform: macOS
+    sources:
+      - path: BambuDryApp
+    info:
+      path: BambuDryApp/Info.plist
+      properties:
+        LSUIElement: true              # menu-bar only, no Dock icon
+        LSMinimumSystemVersion: "13.0"
+        CFBundleDisplayName: BambuDry
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        NSHumanReadableCopyright: ""
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true   # printer is plain LAN, self-signed cert
+    dependencies:
+      - package: BambuDryCore
+        product: BambuDryCore
+    settings:
+      base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_ENTITLEMENTS: BambuDryApp/BambuDry.entitlements
