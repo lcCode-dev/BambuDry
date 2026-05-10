@@ -24,6 +24,13 @@ public partial class App : Application
     private IClassicDesktopStyleApplicationLifetime? _lifetime;
     private bool _isShuttingDown;
 
+    /// <summary>
+    /// When the user pins the dropdown and drags it somewhere, this captures
+    /// the position at hide-time so the next Show restores it. Cleared (or
+    /// ignored) once the window unpins, so unpinning snaps back to the tray.
+    /// </summary>
+    private PixelPoint? _savedPinnedPosition;
+
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
 
     public override void OnFrameworkInitializationCompleted()
@@ -58,7 +65,17 @@ public partial class App : Application
     {
         if (_isShuttingDown || _mainWindow is null) return;
         e.Cancel = true;
+        CapturePinnedPosition();
         _mainWindow.Hide();
+    }
+
+    /// <summary>If the dropdown is pinned, snapshot its position so the next
+    /// Show restores it. No-op when unpinned (those re-anchor to the corner).</summary>
+    private void CapturePinnedPosition()
+    {
+        if (_mainWindow is null) return;
+        if (ViewModel?.IsPinned == true)
+            _savedPinnedPosition = _mainWindow.Position;
     }
 
     private void OnMainWindowLoaded(object? sender, RoutedEventArgs e)
@@ -68,7 +85,12 @@ public partial class App : Application
     }
 
     private void OnMainWindowSizeChanged(object? sender, SizeChangedEventArgs e)
-        => AnchorToTrayCorner();
+    {
+        // While pinned, the user has chosen a position — don't fight it when
+        // content reflows. Auto-anchoring is the unpinned dropdown behaviour.
+        if (ViewModel?.IsPinned == true) return;
+        AnchorToTrayCorner();
+    }
 
     private void OnMainWindowDeactivated(object? sender, System.EventArgs e)
     {
@@ -87,6 +109,7 @@ public partial class App : Application
             if (_mainWindow.IsActive) return;
             // A child dialog is active — leave the main window visible.
             if (_lifetime.Windows.Any(w => w != _mainWindow && w.IsActive)) return;
+            CapturePinnedPosition();
             _mainWindow.Hide();
         }, DispatcherPriority.Background);
     }
@@ -179,10 +202,19 @@ public partial class App : Application
             _mainWindow.WindowState = WindowState.Normal;
         _mainWindow.Activate();
 
-        // Re-anchor after Show, deferred until layout settles. Without this,
-        // Show() can leave the window at its previous (possibly stale) position
-        // before SizeChanged fires.
-        Dispatcher.UIThread.Post(AnchorToTrayCorner, DispatcherPriority.Loaded);
+        // Deferred so layout has settled before we read Bounds / set Position.
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_mainWindow is null) return;
+            if (ViewModel?.IsPinned == true && _savedPinnedPosition is { } pos)
+            {
+                _mainWindow.Position = pos;
+            }
+            else
+            {
+                AnchorToTrayCorner();
+            }
+        }, DispatcherPriority.Loaded);
     }
 
     private void Quit()
@@ -191,7 +223,20 @@ public partial class App : Application
         _lifetime?.Shutdown();
     }
 
-    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e) => UpdateTrayIcon();
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        UpdateTrayIcon();
+        if (e.PropertyName == nameof(AppViewModel.IsPinned))
+        {
+            if (ViewModel?.IsPinned == false)
+            {
+                // Unpinning means "back to dropdown behaviour" — drop the saved
+                // position and snap the window back to the tray corner now.
+                _savedPinnedPosition = null;
+                AnchorToTrayCorner();
+            }
+        }
+    }
     private void OnSnapshotsChanged(object? sender, NotifyCollectionChangedEventArgs e) => UpdateTrayIcon();
 
     private void UpdateTrayIcon()
