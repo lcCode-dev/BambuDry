@@ -4,8 +4,12 @@
 > units using the built-in heater, controlled over LAN. Free and open source.
 
 <p align="center">
-  <img src="docs/screenshots/dropdown.png" alt="BambuDry menu bar dropdown" width="380">
+  <img src="docs/screenshots/dropdown.png"         alt="BambuDry on macOS"   width="320">
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/dropdown-windows.png" alt="BambuDry on Windows" width="320">
 </p>
+
+<p align="center"><sub>macOS menu-bar dropdown · Windows tray dropdown</sub></p>
 
 When humidity creeps up, the heater turns on. When humidity drops back to your
 target, the heater turns off. Anti-cycling guards prevent rapid toggling.
