@@ -1,50 +1,200 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:BambuDry.App.ViewModels"
-        xmlns:core="clr-namespace:BambuDry.Core;assembly=BambuDry.Core"
         x:Class="BambuDry.App.Views.MainWindow"
         x:DataType="vm:AppViewModel"
-        Width="380" Height="520"
+        Width="380"
         Title="BambuDry"
-        WindowStartupLocation="CenterScreen">
-    <Grid RowDefinitions="Auto,*,Auto" Margin="16">
-        <StackPanel Grid.Row="0" Spacing="2">
-            <TextBlock Text="{Binding Config.PrinterName}" FontSize="16" FontWeight="SemiBold"/>
-            <TextBlock Text="{Binding State}" Opacity="0.7" FontSize="12"/>
-            <TextBlock Text="{Binding LastError}" Foreground="OrangeRed" FontSize="12"
-                       IsVisible="{Binding LastError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-        </StackPanel>
+        SystemDecorations="None"
+        CanResize="False"
+        SizeToContent="Height"
+        ShowInTaskbar="False"
+        WindowStartupLocation="Manual"
+        Background="#16161B">
 
-        <ScrollViewer Grid.Row="1" Margin="0,12,0,12">
-            <ItemsControl ItemsSource="{Binding AmsSnapshots}">
+    <Window.Styles>
+        <Style Selector="TextBlock.title">
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="#F0F0F4"/>
+        </Style>
+        <Style Selector="TextBlock.subtitle">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Opacity" Value="0.55"/>
+            <Setter Property="Foreground" Value="#F0F0F4"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="TextBlock.label">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="#A0A0A8"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="TextBlock.value">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="#E0E0E4"/>
+        </Style>
+        <Style Selector="Border.row">
+            <Setter Property="Padding" Value="14,10"/>
+            <Setter Property="BorderBrush" Value="#2A2A30"/>
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+        </Style>
+        <Style Selector="Button.linkish">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Foreground" Value="#A0A0A8"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+        <Style Selector="Button.linkish:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#23232A"/>
+        </Style>
+        <Style Selector="Button.icon">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="6,2"/>
+            <Setter Property="MinWidth" Value="24"/>
+            <Setter Property="Foreground" Value="#7A7A82"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+        <Style Selector="Button.icon:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#23232A"/>
+            <Setter Property="Foreground" Value="#F0F0F4"/>
+        </Style>
+        <Style Selector="ProgressBar.humidity">
+            <Setter Property="Height" Value="5"/>
+            <Setter Property="Minimum" Value="0"/>
+            <Setter Property="Maximum" Value="1"/>
+            <Setter Property="Background" Value="#2A2A30"/>
+            <Setter Property="CornerRadius" Value="2.5"/>
+        </Style>
+        <Style Selector="Slider">
+            <Setter Property="Margin" Value="0"/>
+            <Setter Property="MinHeight" Value="24"/>
+        </Style>
+        <Style Selector="ToggleSwitch.compact">
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="OnContent" Value=""/>
+            <Setter Property="OffContent" Value=""/>
+            <Setter Property="Padding" Value="0"/>
+        </Style>
+    </Window.Styles>
+
+    <Border BorderBrush="#33333A" BorderThickness="1" CornerRadius="2">
+        <StackPanel>
+            <!-- Header (drag handle) -->
+            <Border Classes="row" PointerPressed="OnHeaderPressed">
+                <Grid ColumnDefinitions="*,Auto,Auto" VerticalAlignment="Center">
+                    <TextBlock Grid.Column="0" Classes="title"
+                               Text="{Binding Config.PrinterName, FallbackValue='BambuDry'}"
+                               VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="1" Classes="value"
+                               Text="{Binding StateText}"
+                               Foreground="{Binding StateBrush}"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0"/>
+                    <Button Grid.Column="2" Classes="icon" Content="✕"
+                            ToolTip.Tip="Hide" Click="OnHide" VerticalAlignment="Center"/>
+                </Grid>
+            </Border>
+
+            <!-- Error banner (only when set) -->
+            <Border Classes="row"
+                    IsVisible="{Binding LastError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                <TextBlock Text="{Binding LastError}" Foreground="OrangeRed" FontSize="12" TextWrapping="Wrap"/>
+            </Border>
+
+            <!-- AMS rows -->
+            <ItemsControl ItemsSource="{Binding Rows}">
                 <ItemsControl.ItemTemplate>
-                    <DataTemplate DataType="core:AmsSnapshot">
-                        <Border CornerRadius="6" Padding="10" Margin="0,0,0,8"
-                                BorderBrush="{DynamicResource SystemBaseLowColor}" BorderThickness="1">
-                            <StackPanel Spacing="4">
-                                <TextBlock>
-                                    <Run Text="AMS "/><Run Text="{Binding AmsId}"/>
-                                    <Run Text=" — "/><Run Text="{Binding Model}"/>
-                                </TextBlock>
-                                <TextBlock>
-                                    <Run Text="Humidity: "/><Run Text="{Binding HumidityPercent, TargetNullValue='—'}"/><Run Text="%"/>
-                                </TextBlock>
-                                <TextBlock>
-                                    <Run Text="Temp: "/><Run Text="{Binding CurrentTempC, TargetNullValue='—'}"/><Run Text=" °C"/>
-                                </TextBlock>
-                                <TextBlock Text="Drying" Foreground="OrangeRed" FontWeight="SemiBold"
-                                           IsVisible="{Binding IsCurrentlyDrying}"/>
+                    <DataTemplate DataType="vm:AmsRowViewModel">
+                        <Border Classes="row">
+                            <StackPanel Spacing="6">
+                                <!-- title row + auto toggle -->
+                                <Grid ColumnDefinitions="*,Auto,Auto" VerticalAlignment="Center">
+                                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
+                                        <TextBlock Classes="title" FontSize="13" Text="{Binding Title}"/>
+                                        <TextBlock Classes="subtitle" Text="{Binding Subtitle}"/>
+                                    </StackPanel>
+                                    <ToggleSwitch Grid.Column="1" Classes="compact"
+                                                  IsChecked="{Binding Settings.Enabled, Mode=OneWay}"
+                                                  IsEnabled="False"
+                                                  VerticalAlignment="Center"
+                                                  Margin="0,0,6,0"/>
+                                    <TextBlock Grid.Column="2" Classes="value"
+                                               Text="Auto on" FontSize="11"
+                                               IsVisible="{Binding Settings.Enabled}"
+                                               VerticalAlignment="Center"/>
+                                </Grid>
+
+                                <!-- humidity bar -->
+                                <Grid ColumnDefinitions="Auto,*,Auto">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="Humidity"/>
+                                    <ProgressBar Grid.Column="1" Classes="humidity"
+                                                 Value="{Binding HumidityFraction, Mode=OneWay}"
+                                                 Foreground="{Binding HumidityBrush}"
+                                                 Margin="8,0,8,0"
+                                                 VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="2" Classes="value"
+                                               Text="{Binding HumidityPercentText}"
+                                               FontWeight="SemiBold"/>
+                                </Grid>
+
+                                <!-- status line + (stop button when drying) + temp -->
+                                <Grid ColumnDefinitions="*,Auto,Auto">
+                                    <TextBlock Grid.Column="0" Classes="value"
+                                               Text="{Binding StatusText}"
+                                               Foreground="{Binding StatusBrush}"
+                                               TextTrimming="CharacterEllipsis"
+                                               VerticalAlignment="Center"/>
+                                    <Button   Grid.Column="1"
+                                              Content="● Stop" FontSize="11" Padding="6,1"
+                                              Margin="6,0,8,0"
+                                              Foreground="OrangeRed"
+                                              Background="#23232A"
+                                              BorderBrush="#3A2929"
+                                              BorderThickness="1"
+                                              CornerRadius="3"
+                                              IsVisible="{Binding IsDrying}"
+                                              IsEnabled="False"
+                                              VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding CurrentTempCText}"
+                                               VerticalAlignment="Center"/>
+                                </Grid>
+
+                                <!-- thresholds -->
+                                <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto" Margin="0,2,0,0">
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Start ≥" Margin="0,0,8,0"/>
+                                    <Slider     Grid.Row="0" Grid.Column="1" Minimum="5" Maximum="60"
+                                                Value="{Binding HighThreshold, Mode=OneWay}"
+                                                IsEnabled="False"/>
+                                    <TextBlock  Grid.Row="0" Grid.Column="2" Classes="value" VerticalAlignment="Center" Margin="8,0,0,0">
+                                        <Run Text="{Binding HighThreshold}"/><Run Text="%"/>
+                                    </TextBlock>
+
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="Stop ≤" Margin="0,0,8,0"/>
+                                    <Slider     Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="35"
+                                                Value="{Binding LowThreshold, Mode=OneWay}"
+                                                IsEnabled="False"/>
+                                    <TextBlock  Grid.Row="1" Grid.Column="2" Classes="value" VerticalAlignment="Center" Margin="8,0,0,0">
+                                        <Run Text="{Binding LowThreshold}"/><Run Text="%"/>
+                                    </TextBlock>
+                                </Grid>
                             </StackPanel>
                         </Border>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
-        </ScrollViewer>
 
-        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-            <Button Content="Setup…" Click="OnOpenSetup"/>
-            <Button Content="Settings…" Click="OnOpenSettings"/>
-            <Button Content="Reconnect" Click="OnReconnect"/>
+            <!-- Footer (no bottom border) -->
+            <Grid ColumnDefinitions="*,Auto" Margin="14,8,14,10">
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="0">
+                    <Button Classes="linkish" Content="Setup…"    Click="OnOpenSetup"
+                            IsVisible="{Binding !IsConfigured}"/>
+                    <Button Classes="linkish" Content="Settings…" Click="OnOpenSettings"/>
+                    <Button Classes="linkish" Content="Quit"      Click="OnQuit"/>
+                </StackPanel>
+            </Grid>
         </StackPanel>
-    </Grid>
+    </Border>
 </Window>

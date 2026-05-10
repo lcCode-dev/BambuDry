@@ -36,11 +36,12 @@ public partial class App : Application
             // Keep the app alive when the main window is closed — tray stays.
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
             _mainWindow.Closing += OnMainWindowClosing;
+            _mainWindow.Opened += OnMainWindowOpened;
 
             SetupTrayIcon();
 
             ViewModel.PropertyChanged += OnViewModelPropertyChanged;
-            ViewModel.AmsSnapshots.CollectionChanged += OnSnapshotsChanged;
+            ViewModel.Rows.CollectionChanged += OnSnapshotsChanged;
             UpdateTrayIcon();
 
             _ = ViewModel.StartAsync();
@@ -55,6 +56,27 @@ public partial class App : Application
         e.Cancel = true;
         _mainWindow.Hide();
     }
+
+    private void OnMainWindowOpened(object? sender, System.EventArgs e)
+    {
+        // First-show only: anchor to the bottom-right of the working area, near
+        // the tray icon. After this fires once, Avalonia preserves the user's
+        // dragged position across Hide()/Show() cycles.
+        if (_mainWindow is null) return;
+        var screen = _mainWindow.Screens.Primary ?? _mainWindow.Screens.ScreenFromVisual(_mainWindow);
+        if (screen is null) return;
+        var wa = screen.WorkingArea;
+        var w  = (int)_mainWindow.Bounds.Width;
+        var h  = (int)_mainWindow.Bounds.Height;
+        if (w <= 0) w = 380;
+        if (h <= 0) h = 480;
+        var x = wa.X + wa.Width  - w - 12;
+        var y = wa.Y + wa.Height - h - 12;
+        _mainWindow.Position = new Avalonia.PixelPoint(x, y);
+        _mainWindow.Opened -= OnMainWindowOpened; // first show only
+    }
+
+    public void QuitApp() => Quit();
 
     private void SetupTrayIcon()
     {
@@ -130,9 +152,9 @@ public partial class App : Application
             return "tray-offline.png";
 
         var hi = vm.Config.DefaultSettings.HighThreshold;
-        if (vm.AmsSnapshots.Any(s => s.IsCurrentlyDrying))
+        if (vm.Rows.Any(r => r.IsDrying))
             return "tray-drying.png";
-        if (vm.AmsSnapshots.Any(s => s.HumidityPercent is int rh && rh >= hi))
+        if (vm.Rows.Any(r => r.HumidityPercent is int rh && rh >= hi))
             return "tray-warm.png";
         return "tray-idle.png";
     }

@@ -15,11 +15,36 @@ public sealed partial class AppViewModel : ObservableObject
 {
     public enum ConnectionState { NotConfigured, Connecting, Connected, Disconnected }
 
-    [ObservableProperty] private AppConfig _config;
-    [ObservableProperty] private ConnectionState _state;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsConfigured), nameof(StateText), nameof(StateBrush))]
+    private AppConfig _config;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StateText), nameof(StateBrush))]
+    private ConnectionState _state;
+
     [ObservableProperty] private string? _lastError;
 
-    public ObservableCollection<AmsSnapshot> AmsSnapshots { get; } = new();
+    public bool IsConfigured => Config.IsConfigured;
+
+    public string StateText => State switch
+    {
+        ConnectionState.NotConfigured => "Not configured",
+        ConnectionState.Connecting    => "Connecting…",
+        ConnectionState.Connected     => "Connected",
+        ConnectionState.Disconnected  => "Disconnected",
+        _ => string.Empty,
+    };
+
+    public Avalonia.Media.IBrush StateBrush => State switch
+    {
+        ConnectionState.Connected     => Avalonia.Media.Brushes.LimeGreen,
+        ConnectionState.Connecting    => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(0xFF, 0xA8, 0x26)),
+        ConnectionState.Disconnected  => Avalonia.Media.Brushes.OrangeRed,
+        _                             => Avalonia.Media.Brushes.Gray,
+    };
+
+    public ObservableCollection<AmsRowViewModel> Rows { get; } = new();
 
     private LanTransport? _transport;
     private Orchestrator? _orchestrator;
@@ -38,17 +63,6 @@ public sealed partial class AppViewModel : ObservableObject
         if (!newConfig.IsConfigured) State = ConnectionState.NotConfigured;
     }
 
-    /// <summary>
-    /// Replace the default per-AMS settings, persist to disk, and live-push to
-    /// a running orchestrator so the change takes effect without reconnect.
-    /// </summary>
-    public void UpdateDefaultSettings(AutoDrySettings newDefaults)
-    {
-        Config = Config with { DefaultSettings = newDefaults };
-        ConfigStore.Save(Config);
-        _orchestrator?.SetDefaultSettings(newDefaults);
-    }
-
     public void SaveAccessCode(string code)
     {
         if (string.IsNullOrEmpty(Config.Serial)) return;
@@ -58,15 +72,33 @@ public sealed partial class AppViewModel : ObservableObject
     public string? LoadAccessCode() =>
         string.IsNullOrEmpty(Config.Serial) ? null : CredentialStore.Load(Config.Serial);
 
+    /// <summary>
+    /// Replace the default per-AMS settings, persist to disk, push to a running
+    /// orchestrator, and refresh the row VMs so display thresholds update too.
+    /// </summary>
+    public void UpdateDefaultSettings(AutoDrySettings newDefaults)
+    {
+        Config = Config with { DefaultSettings = newDefaults };
+        ConfigStore.Save(Config);
+        _orchestrator?.SetDefaultSettings(newDefaults);
+        foreach (var row in Rows) row.Settings = newDefaults;
+    }
+
     public async Task StartAsync()
     {
         await StopAsync().ConfigureAwait(false);
 
         if (!Config.IsConfigured) { State = ConnectionState.NotConfigured; return; }
         var code = LoadAccessCode();
-        if (string.IsNullOrEmpty(code)) { State = ConnectionState.NotConfigured; LastError = "Access code not set."; return; }
+        if (string.IsNullOrEmpty(code))
+        {
+            State = ConnectionState.NotConfigured;
+            LastError = "Access code not set.";
+            return;
+        }
 
         State = ConnectionState.Connecting;
+        LastError = null;
         try
         {
             _transport = new LanTransport(new LanTransport.Config(
@@ -74,7 +106,6 @@ public sealed partial class AppViewModel : ObservableObject
                 Serial: Config.Serial,
                 AccessCode: code));
 
-            // Build orchestrator config from current AppConfig.
             var settingsByAms = new Dictionary<int, AutoDrySettings>();
             foreach (var (k, v) in Config.AmsSettings)
                 if (int.TryParse(k, out var amsId)) settingsByAms[amsId] = v;
@@ -83,7 +114,7 @@ public sealed partial class AppViewModel : ObservableObject
             {
                 SettingsByAmsId = settingsByAms,
                 DefaultSettings = Config.DefaultSettings,
-                DryRun = true,  // start safe; user can toggle off in Advanced
+                DryRun = true,   // start safe; user can toggle off later
             });
 
             _runCts = new CancellationTokenSource();
@@ -118,15 +149,37 @@ public sealed partial class AppViewModel : ObservableObject
             {
                 await foreach (var ev in orch.Events(ct).ConfigureAwait(false))
                 {
-                    if (ev is Orchestrator.Event.Observed o)
-                        Avalonia.Threading.Dispatcher.UIThread.Post(() => UpsertSnapshot(o.Snapshot));
-                    else if (ev is Orchestrator.Event.ErrorOccurred err)
-                        Avalonia.Threading.Dispatcher.UIThread.Post(() => LastError = err.Message);
+                    switch (ev)
+                    {
+                        case Orchestrator.Event.Connected:
+                            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                            {
+                                if (State == ConnectionState.Connecting) State = ConnectionState.Connected;
+                            });
+                            break;
+
+                        case Orchestrator.Event.Observed o:
+                            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                            {
+                                // Belt-and-suspenders: if Connected event was missed (e.g. raced past
+                                // first report), promote state on first observed too.
+                                if (State == ConnectionState.Connecting) State = ConnectionState.Connected;
+                                UpsertSnapshot(o.Snapshot);
+                            });
+                            break;
+
+                        case Orchestrator.Event.DecisionMade d:
+                            Avalonia.Threading.Dispatcher.UIThread.Post(() => UpsertDecision(d.AmsId, d.Decision));
+                            break;
+
+                        case Orchestrator.Event.ErrorOccurred err:
+                            Avalonia.Threading.Dispatcher.UIThread.Post(() => LastError = err.Message);
+                            break;
+                    }
                 }
             }, ct);
 
             await orch.RunAsync(ct).ConfigureAwait(false);
-            State = ConnectionState.Connected;
             await observe.ConfigureAwait(false);
         }
         catch (OperationCanceledException) { /* shutdown */ }
@@ -142,14 +195,26 @@ public sealed partial class AppViewModel : ObservableObject
 
     private void UpsertSnapshot(AmsSnapshot snap)
     {
-        for (var i = 0; i < AmsSnapshots.Count; i++)
+        var settings = Config.SettingsForAmsId(snap.AmsId);
+        for (var i = 0; i < Rows.Count; i++)
         {
-            if (AmsSnapshots[i].AmsId == snap.AmsId) { AmsSnapshots[i] = snap; return; }
+            if (Rows[i].AmsId == snap.AmsId)
+            {
+                Rows[i].Snapshot = snap;
+                Rows[i].Settings = settings;
+                return;
+            }
         }
-        AmsSnapshots.Add(snap);
+        Rows.Add(new AmsRowViewModel(snap, settings));
         // keep stable order by AMS id
-        var sorted = AmsSnapshots.OrderBy(s => s.AmsId).ToList();
-        AmsSnapshots.Clear();
-        foreach (var s in sorted) AmsSnapshots.Add(s);
+        var sorted = Rows.OrderBy(r => r.AmsId).ToList();
+        Rows.Clear();
+        foreach (var r in sorted) Rows.Add(r);
+    }
+
+    private void UpsertDecision(int amsId, Decision decision)
+    {
+        foreach (var row in Rows)
+            if (row.AmsId == amsId) { row.LastDecision = decision; return; }
     }
 }

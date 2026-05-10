@@ -19,6 +19,8 @@ public sealed class Orchestrator
 {
     public abstract record Event(DateTime Timestamp)
     {
+        /// <summary>Transport connected and subscribed; first report not yet received.</summary>
+        public sealed record Connected(DateTime Timestamp) : Event(Timestamp);
         public sealed record Observed(DateTime Timestamp, AmsSnapshot Snapshot) : Event(Timestamp);
         public sealed record DecisionMade(DateTime Timestamp, int AmsId, Decision Decision) : Event(Timestamp);
         public sealed record Sent(DateTime Timestamp, int AmsId, string Json) : Event(Timestamp);
@@ -68,6 +70,7 @@ public sealed class Orchestrator
         try
         {
             await _transport.ConnectAsync(ct: ct).ConfigureAwait(false);
+            Emit(new Event.Connected(DateTime.UtcNow));
             await _transport.RequestPushAllAsync(ct).ConfigureAwait(false);
             _lastPushAllAt = DateTime.UtcNow;
 
