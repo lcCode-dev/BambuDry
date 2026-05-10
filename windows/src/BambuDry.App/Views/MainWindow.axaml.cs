@@ -35,12 +35,6 @@ public partial class MainWindow : Window
         Close();
     }
 
-    private void OnOpenSetup(object? sender, RoutedEventArgs e)
-    {
-        if (DataContext is not AppViewModel vm) return;
-        new PrinterSetupWindow { DataContext = vm }.ShowDialog(this);
-    }
-
     private void OnOpenSettings(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not AppViewModel vm) return;

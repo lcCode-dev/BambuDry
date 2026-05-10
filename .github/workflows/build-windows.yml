@@ -64,7 +64,9 @@ jobs:
 
       - name: Run unit tests
         working-directory: windows
-        run: dotnet test tests/BambuDry.Core.Tests/BambuDry.Core.Tests.csproj --no-build -c Release --nologo --verbosity normal
+        # Runs both BambuDry.Core.Tests (cross-platform pure-logic) and
+        # BambuDry.App.Tests (Windows-specific config + Credential Manager).
+        run: dotnet test BambuDry.sln --no-build -c Release --nologo --verbosity normal
 
       - name: Resolve version + filenames
         id: meta

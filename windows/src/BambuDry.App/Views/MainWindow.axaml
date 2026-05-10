@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:BambuDry.App.ViewModels"
+        xmlns:views="clr-namespace:BambuDry.App.Views"
         x:Class="BambuDry.App.Views.MainWindow"
         x:DataType="vm:AppViewModel"
         Width="380"
@@ -132,6 +133,24 @@
                 <TextBlock Text="{Binding LastError}" Foreground="OrangeRed" FontSize="12" TextWrapping="Wrap"/>
             </Border>
 
+            <!-- Embedded setup form when there's no printer config yet -->
+            <views:PrinterSetupView IsVisible="{Binding ShowSetup}"/>
+
+            <!-- "Waiting for printer" placeholder when configured but no rows yet -->
+            <Border Classes="row" IsVisible="{Binding ShowWaiting}"
+                    BorderThickness="0,1,0,1">
+                <StackPanel Spacing="6" Margin="0,8,0,8" HorizontalAlignment="Center">
+                    <TextBlock Text="{Binding EmptyBodyText}"
+                               Foreground="#A0A0A8" FontSize="12"
+                               HorizontalAlignment="Center"/>
+                    <TextBlock Text="{Binding LastError}"
+                               Foreground="OrangeRed" FontSize="11"
+                               HorizontalAlignment="Center"
+                               TextWrapping="Wrap"
+                               IsVisible="{Binding LastError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                </StackPanel>
+            </Border>
+
             <!-- AMS rows -->
             <ItemsControl ItemsSource="{Binding Rows}">
                 <ItemsControl.ItemTemplate>
@@ -215,8 +234,6 @@
             <!-- Footer (no bottom border) -->
             <Grid ColumnDefinitions="*,Auto" Margin="14,8,14,10">
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="0">
-                    <Button Classes="linkish" Content="Setup…"    Click="OnOpenSetup"
-                            IsVisible="{Binding !IsConfigured}"/>
                     <Button Classes="linkish" Content="Settings…" Click="OnOpenSettings"/>
                     <Button Classes="linkish" Content="Quit"      Click="OnQuit"/>
                 </StackPanel>

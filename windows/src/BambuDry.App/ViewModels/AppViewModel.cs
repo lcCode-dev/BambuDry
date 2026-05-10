@@ -16,11 +16,13 @@ public sealed partial class AppViewModel : ObservableObject
     public enum ConnectionState { NotConfigured, Connecting, Connected, Disconnected }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsConfigured), nameof(StateText), nameof(StateBrush))]
+    [NotifyPropertyChangedFor(nameof(IsConfigured), nameof(ShowSetup), nameof(ShowWaiting),
+        nameof(StateText), nameof(StateBrush))]
     private AppConfig _config;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(StateText), nameof(StateBrush))]
+    [NotifyPropertyChangedFor(nameof(StateText), nameof(StateBrush),
+        nameof(EmptyBodyText), nameof(ShowWaiting))]
     private ConnectionState _state;
 
     [ObservableProperty] private string? _lastError;
@@ -33,6 +35,22 @@ public sealed partial class AppViewModel : ObservableObject
     [ObservableProperty] private bool _isPinned;
 
     public bool IsConfigured => Config.IsConfigured;
+
+    /// <summary>Show the embedded setup form when there's no printer config yet.</summary>
+    public bool ShowSetup => !IsConfigured;
+
+    /// <summary>Show the "waiting for first report" placeholder when configured but no rows yet.</summary>
+    public bool ShowWaiting => IsConfigured && Rows.Count == 0;
+
+    /// <summary>Body placeholder text — varies by connection state.</summary>
+    public string EmptyBodyText => State switch
+    {
+        ConnectionState.Connecting    => "Connecting to printer…",
+        ConnectionState.Connected     => "Waiting for first AMS report…",
+        ConnectionState.Disconnected  => "Disconnected. Open Settings → Advanced → Reconnect.",
+        ConnectionState.NotConfigured => "",
+        _                             => "",
+    };
 
     public string StateText => State switch
     {
@@ -69,6 +87,9 @@ public sealed partial class AppViewModel : ObservableObject
     {
         _config = config;
         _state = config.IsConfigured ? ConnectionState.Disconnected : ConnectionState.NotConfigured;
+        // ShowWaiting depends on Rows.Count — refire the binding when the
+        // collection changes so the placeholder swaps to the rows list.
+        Rows.CollectionChanged += (_, _) => OnPropertyChanged(nameof(ShowWaiting));
     }
 
     public void SaveAndPersistConfig(AppConfig newConfig)

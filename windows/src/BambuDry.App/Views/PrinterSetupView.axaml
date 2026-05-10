@@ -1,0 +1,55 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:BambuDry.App.ViewModels"
+             x:Class="BambuDry.App.Views.PrinterSetupView"
+             x:DataType="vm:AppViewModel">
+
+    <UserControl.Styles>
+        <Style Selector="TextBox">
+            <Setter Property="Margin" Value="0,0,0,2"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+        <Style Selector="TextBlock.field-label">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="#A0A0A8"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,0,8,0"/>
+        </Style>
+    </UserControl.Styles>
+
+    <StackPanel Margin="14,8,14,12" Spacing="10">
+        <TextBlock Text="Add your Bambu printer" FontSize="14" FontWeight="SemiBold" Foreground="#F0F0F4"/>
+        <TextBlock TextWrapping="Wrap" FontSize="11" Opacity="0.7"
+                   Text="On the printer touchscreen: Settings → WLAN. The Access Code is on the same screen (8 characters)."/>
+
+        <Border CornerRadius="4" Padding="10,8"
+                Background="#2E2516" BorderBrush="#5A4520" BorderThickness="1">
+            <TextBlock Foreground="OrangeRed" TextWrapping="Wrap" FontSize="11">
+                <Run FontWeight="SemiBold" Text="Enable Developer Mode on the printer."/>
+                <LineBreak/>
+                <Run Text="Settings → General → Developer Mode. Without it the firmware silently ignores remote drying commands — humidity will display, but auto-dry won't actually fire."/>
+            </TextBlock>
+        </Border>
+
+        <Grid ColumnDefinitions="100,*">
+            <TextBlock Grid.Column="0" Classes="field-label" Text="Name"/>
+            <TextBox Grid.Column="1" x:Name="NameField" Text="{Binding Config.PrinterName, Mode=OneTime}"/>
+        </Grid>
+        <Grid ColumnDefinitions="100,*">
+            <TextBlock Grid.Column="0" Classes="field-label" Text="LAN IP"/>
+            <TextBox Grid.Column="1" x:Name="IpField" Text="{Binding Config.LanIp, Mode=OneTime}" Watermark="192.168.x.x"/>
+        </Grid>
+        <Grid ColumnDefinitions="100,*">
+            <TextBlock Grid.Column="0" Classes="field-label" Text="Serial"/>
+            <TextBox Grid.Column="1" x:Name="SerialField" Text="{Binding Config.Serial, Mode=OneTime}" Watermark="01S00A2B…"/>
+        </Grid>
+        <Grid ColumnDefinitions="100,*">
+            <TextBlock Grid.Column="0" Classes="field-label" Text="Access Code"/>
+            <TextBox Grid.Column="1" x:Name="CodeField" PasswordChar="•" Watermark="8 characters"/>
+        </Grid>
+
+        <Button Content="Save &amp; Connect" Classes="accent"
+                HorizontalAlignment="Right" Margin="0,4,0,0"
+                Click="OnSave"/>
+    </StackPanel>
+</UserControl>
