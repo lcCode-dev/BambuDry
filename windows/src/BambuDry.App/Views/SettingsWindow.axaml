@@ -3,58 +3,136 @@
         xmlns:vm="clr-namespace:BambuDry.App.ViewModels"
         x:Class="BambuDry.App.Views.SettingsWindow"
         x:DataType="vm:SettingsViewModel"
-        Width="480" Height="440"
+        Width="520" Height="500"
         Title="BambuDry settings"
         WindowStartupLocation="CenterOwner">
-    <Grid Margin="16" RowDefinitions="Auto,*,Auto">
-        <TextBlock Grid.Row="0" Text="Default per-AMS settings"
-                   FontWeight="SemiBold" Margin="0,0,0,12"/>
 
-        <ScrollViewer Grid.Row="1">
-            <StackPanel Spacing="10">
-                <CheckBox Content="Enabled by default" IsChecked="{Binding Enabled}"/>
-                <CheckBox Content="Run during prints"  IsChecked="{Binding RunDuringPrint}"/>
+    <Window.Styles>
+        <Style Selector="TextBlock.field-label">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,0,12,0"/>
+            <Setter Property="MinWidth" Value="120"/>
+            <Setter Property="Foreground" Value="#C0C0C8"/>
+        </Style>
+        <Style Selector="TextBox">
+            <Setter Property="Margin" Value="0,0,0,4"/>
+        </Style>
+        <Style Selector="TextBlock.help">
+            <Setter Property="Opacity" Value="0.65"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="0,4,0,0"/>
+        </Style>
+    </Window.Styles>
 
-                <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto,Auto">
-                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Start drying ≥ (RH %)"
-                               VerticalAlignment="Center" Margin="0,0,8,4"/>
-                    <NumericUpDown Grid.Row="0" Grid.Column="1"
-                                   Minimum="5" Maximum="35" Increment="1" FormatString="0"
-                                   Value="{Binding HighThreshold}" Margin="0,0,0,4"/>
+    <TabControl Margin="8">
+        <!-- ───────────────  Printer  ─────────────── -->
+        <TabItem Header="Printer">
+            <StackPanel Margin="14" Spacing="10">
+                <Grid ColumnDefinitions="120,*"><TextBlock Grid.Column="0" Classes="field-label" Text="Name"/>
+                    <TextBox Grid.Column="1" Text="{Binding PrinterName}"/></Grid>
+                <Grid ColumnDefinitions="120,*"><TextBlock Grid.Column="0" Classes="field-label" Text="LAN IP"/>
+                    <TextBox Grid.Column="1" Text="{Binding LanIp}" Watermark="192.168.x.x"/></Grid>
+                <Grid ColumnDefinitions="120,*"><TextBlock Grid.Column="0" Classes="field-label" Text="Serial"/>
+                    <TextBox Grid.Column="1" Text="{Binding Serial}" Watermark="01S00A2B…"/></Grid>
+                <Grid ColumnDefinitions="120,*"><TextBlock Grid.Column="0" Classes="field-label" Text="Access Code"/>
+                    <TextBox Grid.Column="1" Text="{Binding AccessCode}" PasswordChar="•" Watermark="8 characters"/></Grid>
 
-                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Stop drying ≤ (RH %)"
-                               VerticalAlignment="Center" Margin="0,0,8,4"/>
-                    <NumericUpDown Grid.Row="1" Grid.Column="1"
-                                   Minimum="0" Maximum="25" Increment="1" FormatString="0"
-                                   Value="{Binding LowThreshold}" Margin="0,0,0,4"/>
+                <TextBlock Classes="help"
+                           Text="Find LAN IP and Access Code on the printer touchscreen: Settings → WLAN. Make sure Developer Mode is on (Settings → General → Developer Mode) — without it the printer silently ignores remote drying commands."/>
 
-                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Min on (minutes)"
-                               VerticalAlignment="Center" Margin="0,0,8,4"/>
-                    <NumericUpDown Grid.Row="2" Grid.Column="1"
-                                   Minimum="0" Maximum="60" Increment="1" FormatString="0"
-                                   Value="{Binding MinOnMinutes}" Margin="0,0,0,4"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,8,0,0">
+                    <Button Content="Save &amp; Reconnect" Classes="accent" Command="{Binding SavePrinterCommand}"/>
+                </StackPanel>
+            </StackPanel>
+        </TabItem>
 
-                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Min off (minutes)"
-                               VerticalAlignment="Center" Margin="0,0,8,4"/>
-                    <NumericUpDown Grid.Row="3" Grid.Column="1"
-                                   Minimum="0" Maximum="60" Increment="1" FormatString="0"
-                                   Value="{Binding MinOffMinutes}" Margin="0,0,0,4"/>
+        <!-- ───────────────  Defaults  ─────────────── -->
+        <TabItem Header="Defaults">
+            <StackPanel Margin="14" Spacing="10">
+                <CheckBox Content="Enabled by default for new AMS units"
+                          IsChecked="{Binding DefaultEnabled}"/>
+                <CheckBox Content="Run during prints"
+                          IsChecked="{Binding DefaultRunDuringPrint}"/>
+
+                <Grid ColumnDefinitions="180,*">
+                    <TextBlock Grid.Column="0" Classes="field-label" Text="Start drying ≥ (RH%)"/>
+                    <NumericUpDown Grid.Column="1" Minimum="5" Maximum="35" Increment="1" FormatString="0"
+                                   Value="{Binding DefaultHigh}"/>
+                </Grid>
+                <Grid ColumnDefinitions="180,*">
+                    <TextBlock Grid.Column="0" Classes="field-label" Text="Stop drying ≤ (RH%)"/>
+                    <NumericUpDown Grid.Column="1" Minimum="0" Maximum="25" Increment="1" FormatString="0"
+                                   Value="{Binding DefaultLow}"/>
+                </Grid>
+                <Grid ColumnDefinitions="180,*">
+                    <TextBlock Grid.Column="0" Classes="field-label" Text="Min on (minutes)"/>
+                    <NumericUpDown Grid.Column="1" Minimum="0" Maximum="60" Increment="1" FormatString="0"
+                                   Value="{Binding DefaultMinOn}"/>
+                </Grid>
+                <Grid ColumnDefinitions="180,*">
+                    <TextBlock Grid.Column="0" Classes="field-label" Text="Min off (minutes)"/>
+                    <NumericUpDown Grid.Column="1" Minimum="0" Maximum="60" Increment="1" FormatString="0"
+                                   Value="{Binding DefaultMinOff}"/>
                 </Grid>
 
-                <Border CornerRadius="6" Padding="10" Margin="0,4,0,0"
-                        BorderBrush="{DynamicResource SystemBaseLowColor}" BorderThickness="1">
-                    <TextBlock TextWrapping="Wrap" Opacity="0.75" FontSize="12">
-                        <Run Text="Drying temp is fixed at 45 °C — the AMS heater silently rejects lower targets."/>
-                        <LineBreak/>
-                        <Run Text="Anti-cycling (min on / min off) prevents rapid heater toggling. The Mac side defaults to 5 / 5; raise either if you see chatter."/>
-                    </TextBlock>
-                </Border>
-            </StackPanel>
-        </ScrollViewer>
+                <TextBlock Classes="help"
+                           Text="Drying temp is fixed at 45 °C — the AMS heater silently rejects lower targets. Anti-cycling (min on / min off) prevents rapid heater toggling. Defaults apply to AMS units that don't have their own override yet."/>
 
-        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,12,0,0">
-            <Button Content="Cancel"  Click="OnCancel"/>
-            <Button Content="Save"    Click="OnSave" Classes="accent"/>
-        </StackPanel>
-    </Grid>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,8,0,0">
+                    <Button Content="Save defaults" Classes="accent" Command="{Binding SaveDefaultsCommand}"/>
+                </StackPanel>
+            </StackPanel>
+        </TabItem>
+
+        <!-- ───────────────  Advanced  ─────────────── -->
+        <TabItem Header="Advanced">
+            <Grid Margin="14" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto">
+                <CheckBox Grid.Row="0" Content="Launch BambuDry at login"
+                          IsChecked="{Binding LaunchAtLogin}"/>
+                <CheckBox Grid.Row="1" Content="Dry-run mode (do NOT publish START/STOP commands)"
+                          IsChecked="{Binding DryRunMode}" Margin="0,8,0,0"/>
+                <Border Grid.Row="2" Margin="0,6,0,0" Padding="10,8" CornerRadius="4"
+                        Background="#23232A" BorderBrush="#3A3A42" BorderThickness="1">
+                    <TextBlock Text="{Binding DryRunBannerText}" Classes="help" FontSize="11"/>
+                </Border>
+
+                <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="8" Margin="0,12,0,0">
+                    <Button Content="Reconnect"  Command="{Binding ReconnectCommand}"/>
+                    <Button Content="Disconnect" Command="{Binding DisconnectCommand}"/>
+                </StackPanel>
+
+                <Border Grid.Row="4" Margin="0,12,0,0" CornerRadius="4"
+                        Background="#1B1B20" BorderBrush="#33333A" BorderThickness="1">
+                    <Grid RowDefinitions="Auto,*">
+                        <TextBlock Grid.Row="0" Text="Recent publishes" Margin="10,8,10,4"
+                                   Foreground="#C0C0C8" FontWeight="SemiBold"/>
+                        <ScrollViewer Grid.Row="1" Margin="6,0,6,6">
+                            <ItemsControl ItemsSource="{Binding RecentPublishes}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="vm:AppViewModel+PublishLogEntry">
+                                        <Grid ColumnDefinitions="Auto,*" Margin="6,2">
+                                            <TextBlock Grid.Column="0" Foreground="#7A7A82" FontSize="11"
+                                                       FontFamily="Consolas, Cascadia Mono, monospace"
+                                                       Text="{Binding Timestamp, StringFormat='{}{0:HH:mm:ss}'}"
+                                                       Margin="0,0,8,0"/>
+                                            <TextBlock Grid.Column="1" Foreground="#D0D0D8" FontSize="11"
+                                                       FontFamily="Consolas, Cascadia Mono, monospace"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Text="{Binding Description}"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
+
+                <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,12,0,0">
+                    <Button Content="Apply" Classes="accent" Command="{Binding ApplyAdvancedCommand}"/>
+                    <Button Content="Close" Click="OnClose"/>
+                </StackPanel>
+            </Grid>
+        </TabItem>
+    </TabControl>
 </Window>

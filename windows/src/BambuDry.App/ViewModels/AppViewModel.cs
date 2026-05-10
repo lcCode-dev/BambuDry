@@ -46,6 +46,13 @@ public sealed partial class AppViewModel : ObservableObject
 
     public ObservableCollection<AmsRowViewModel> Rows { get; } = new();
 
+    /// <summary>Most-recent publishes (and dry-run skipped intents) for the Advanced tab log.</summary>
+    public ObservableCollection<PublishLogEntry> RecentPublishes { get; } = new();
+
+    public sealed record PublishLogEntry(DateTime Timestamp, string Description);
+
+    private const int MaxRecentPublishes = 50;
+
     private LanTransport? _transport;
     private Orchestrator? _orchestrator;
     private CancellationTokenSource? _runCts;
@@ -204,6 +211,16 @@ public sealed partial class AppViewModel : ObservableObject
                             Avalonia.Threading.Dispatcher.UIThread.Post(() => UpsertDecision(d.AmsId, d.Decision));
                             break;
 
+                        case Orchestrator.Event.Sent sent:
+                            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                                AppendPublishLog($"AMS {sent.AmsId}: {SummarizeJson(sent.Json)}"));
+                            break;
+
+                        case Orchestrator.Event.DryRunSkipped skip:
+                            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                                AppendPublishLog($"AMS {skip.AmsId}: [dry-run] {DescribeDecision(skip.Decision)}"));
+                            break;
+
                         case Orchestrator.Event.ErrorOccurred err:
                             Avalonia.Threading.Dispatcher.UIThread.Post(() => LastError = err.Message);
                             break;
@@ -248,6 +265,29 @@ public sealed partial class AppViewModel : ObservableObject
         foreach (var row in Rows)
             if (row.AmsId == amsId) { row.LastDecision = decision; return; }
     }
+
+    private void AppendPublishLog(string description)
+    {
+        RecentPublishes.Insert(0, new PublishLogEntry(DateTime.Now, description));
+        while (RecentPublishes.Count > MaxRecentPublishes)
+            RecentPublishes.RemoveAt(RecentPublishes.Count - 1);
+    }
+
+    private static string SummarizeJson(string json)
+    {
+        // Cheap shape match — avoid pulling JsonDocument for a log-line summary.
+        if (json.Contains("\"mode\":1")) return "START drying";
+        if (json.Contains("\"mode\":0") && json.Contains("ams_filament_drying")) return "STOP drying";
+        if (json.Contains("\"command\":\"pushall\"")) return "pushall";
+        return json.Length > 80 ? json[..80] + "…" : json;
+    }
+
+    private static string DescribeDecision(Decision d) => d switch
+    {
+        Decision.Start s => $"START at {s.TempC}°C / {s.Hours}h ({s.Filament})",
+        Decision.Stop   => "STOP",
+        _               => d.GetType().Name,
+    };
 
     private static IReadOnlyDictionary<string, AutoDrySettings> WithAms(
         IReadOnlyDictionary<string, AutoDrySettings> src, int amsId, AutoDrySettings value)

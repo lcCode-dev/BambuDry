@@ -9,7 +9,7 @@ namespace BambuDry.App.Services;
 /// approval flow (HKCU writes don't require admin and don't surface a system
 /// approval prompt).
 /// </summary>
-public static class LaunchAtLogin
+public static class LaunchAtLoginService
 {
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string ValueName = "BambuDry";
