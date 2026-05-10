@@ -17,7 +17,7 @@ public partial class MainWindow : Window
     private void OnOpenSettings(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not AppViewModel vm) return;
-        new SettingsWindow { DataContext = vm }.ShowDialog(this);
+        SettingsWindow.For(vm).ShowDialog(this);
     }
 
     private async void OnReconnect(object? sender, RoutedEventArgs e)

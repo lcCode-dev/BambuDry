@@ -2,31 +2,59 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:BambuDry.App.ViewModels"
         x:Class="BambuDry.App.Views.SettingsWindow"
-        x:DataType="vm:AppViewModel"
-        Width="480" Height="380"
+        x:DataType="vm:SettingsViewModel"
+        Width="480" Height="440"
         Title="BambuDry settings"
         WindowStartupLocation="CenterOwner">
-    <!--
-      Foundation commit: read-only display of current defaults. An editable
-      SettingsViewModel that wraps AutoDrySettings (which is immutable in Core)
-      is the next step. For now, edit config.json directly and Reconnect.
-    -->
     <Grid Margin="16" RowDefinitions="Auto,*,Auto">
-        <TextBlock Grid.Row="0" Text="Defaults (read-only — editable UI is next)" FontWeight="SemiBold" Margin="0,0,0,8"/>
+        <TextBlock Grid.Row="0" Text="Default per-AMS settings"
+                   FontWeight="SemiBold" Margin="0,0,0,12"/>
+
         <ScrollViewer Grid.Row="1">
-            <StackPanel Spacing="6" DataContext="{Binding Config.DefaultSettings}">
-                <TextBlock><Run Text="Enabled by default: "/><Run Text="{Binding Enabled}"/></TextBlock>
-                <TextBlock><Run Text="Run during prints: "/><Run Text="{Binding RunDuringPrint}"/></TextBlock>
-                <TextBlock><Run Text="Start ≥ "/><Run Text="{Binding HighThreshold}"/><Run Text=" %RH"/></TextBlock>
-                <TextBlock><Run Text="Stop ≤ "/><Run Text="{Binding LowThreshold}"/><Run Text=" %RH"/></TextBlock>
-                <TextBlock><Run Text="Min on: "/><Run Text="{Binding MinOnMinutes}"/><Run Text=" minutes"/></TextBlock>
-                <TextBlock><Run Text="Min off: "/><Run Text="{Binding MinOffMinutes}"/><Run Text=" minutes"/></TextBlock>
-                <TextBlock><Run Text="Target temp: "/><Run Text="{Binding TargetTemp}"/><Run Text=" °C"/></TextBlock>
+            <StackPanel Spacing="10">
+                <CheckBox Content="Enabled by default" IsChecked="{Binding Enabled}"/>
+                <CheckBox Content="Run during prints"  IsChecked="{Binding RunDuringPrint}"/>
+
+                <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto,Auto">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Start drying ≥ (RH %)"
+                               VerticalAlignment="Center" Margin="0,0,8,4"/>
+                    <NumericUpDown Grid.Row="0" Grid.Column="1"
+                                   Minimum="5" Maximum="35" Increment="1" FormatString="0"
+                                   Value="{Binding HighThreshold}" Margin="0,0,0,4"/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Stop drying ≤ (RH %)"
+                               VerticalAlignment="Center" Margin="0,0,8,4"/>
+                    <NumericUpDown Grid.Row="1" Grid.Column="1"
+                                   Minimum="0" Maximum="25" Increment="1" FormatString="0"
+                                   Value="{Binding LowThreshold}" Margin="0,0,0,4"/>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Min on (minutes)"
+                               VerticalAlignment="Center" Margin="0,0,8,4"/>
+                    <NumericUpDown Grid.Row="2" Grid.Column="1"
+                                   Minimum="0" Maximum="60" Increment="1" FormatString="0"
+                                   Value="{Binding MinOnMinutes}" Margin="0,0,0,4"/>
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Min off (minutes)"
+                               VerticalAlignment="Center" Margin="0,0,8,4"/>
+                    <NumericUpDown Grid.Row="3" Grid.Column="1"
+                                   Minimum="0" Maximum="60" Increment="1" FormatString="0"
+                                   Value="{Binding MinOffMinutes}" Margin="0,0,0,4"/>
+                </Grid>
+
+                <Border CornerRadius="6" Padding="10" Margin="0,4,0,0"
+                        BorderBrush="{DynamicResource SystemBaseLowColor}" BorderThickness="1">
+                    <TextBlock TextWrapping="Wrap" Opacity="0.75" FontSize="12">
+                        <Run Text="Drying temp is fixed at 45 °C — the AMS heater silently rejects lower targets."/>
+                        <LineBreak/>
+                        <Run Text="Anti-cycling (min on / min off) prevents rapid heater toggling. The Mac side defaults to 5 / 5; raise either if you see chatter."/>
+                    </TextBlock>
+                </Border>
             </StackPanel>
         </ScrollViewer>
+
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,12,0,0">
-            <Button Content="Reconnect" Click="OnReconnect"/>
-            <Button Content="Close" Click="OnClose"/>
+            <Button Content="Cancel"  Click="OnCancel"/>
+            <Button Content="Save"    Click="OnSave" Classes="accent"/>
         </StackPanel>
     </Grid>
 </Window>

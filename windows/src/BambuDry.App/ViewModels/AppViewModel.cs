@@ -38,6 +38,17 @@ public sealed partial class AppViewModel : ObservableObject
         if (!newConfig.IsConfigured) State = ConnectionState.NotConfigured;
     }
 
+    /// <summary>
+    /// Replace the default per-AMS settings, persist to disk, and live-push to
+    /// a running orchestrator so the change takes effect without reconnect.
+    /// </summary>
+    public void UpdateDefaultSettings(AutoDrySettings newDefaults)
+    {
+        Config = Config with { DefaultSettings = newDefaults };
+        ConfigStore.Save(Config);
+        _orchestrator?.SetDefaultSettings(newDefaults);
+    }
+
     public void SaveAccessCode(string code)
     {
         if (string.IsNullOrEmpty(Config.Serial)) return;

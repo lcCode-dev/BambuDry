@@ -14,9 +14,9 @@ deliberately minimal pending iteration.
 | Settings storage | ✅ done | `%APPDATA%\BambuDry\config.json`, schema matches Mac `AppConfig`. |
 | Credential storage | ✅ done | Windows Credential Manager via `Meziantou.Framework.Win32.CredentialManager`, target name `dev.lcCode.BambuDry\<serial>`. |
 | Launch at login | ✅ done | `HKCU\…\Run` registry write. |
-| Avalonia app shell | 🟡 minimal | Setup window works; main window shows live AMS snapshots; settings UI is read-only placeholder. |
-| System tray icon | 🔴 not yet | Will replace `MainWindow` as the primary entry point. |
-| CI workflow | 🔴 not yet | `build-windows.yml` to mirror `build-dmg.yml` once a working build exists. |
+| Avalonia app shell | ✅ working | Setup window, main window with live AMS snapshots, editable settings. |
+| System tray icon | ✅ working | 4-state icon (idle / warm / drying / offline) with NativeMenu (Open / Settings / Quit). Closing the main window hides instead of quitting. |
+| CI workflow | 🔴 not yet | `build-windows.yml` to mirror `build-dmg.yml` once polish is done. |
 
 ## Layout
 
@@ -65,7 +65,7 @@ documented in [../docs/PROTOCOL.md](../docs/PROTOCOL.md).
 
 ## Next steps
 
-1. SettingsViewModel for editable two-way bindings (Core stays immutable; UI gets a mutable wrapper).
-2. System tray icon + borderless dropdown popup (Avalonia `TrayIcon`).
-3. End-to-end test against a real printer on LAN (reconnect logic, dry-run mode).
+1. End-to-end test against a real printer on LAN (reconnect logic, dry-run mode toggle in UI).
+2. Per-AMS settings overrides in the UI (currently only default settings are editable).
+3. Polish: nicer tray icons (current placeholders are solid-colour circles), themed humidity bars, drying countdown.
 4. `.github/workflows/build-windows.yml` mirroring the macOS DMG workflow.

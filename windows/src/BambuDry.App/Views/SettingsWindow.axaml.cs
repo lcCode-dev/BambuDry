@@ -6,13 +6,27 @@ namespace BambuDry.App.Views;
 
 public partial class SettingsWindow : Window
 {
+    private AppViewModel? _appVm;
+
     public SettingsWindow() => InitializeComponent();
 
-    private void OnClose(object? sender, RoutedEventArgs e) => Close();
-
-    private async void OnReconnect(object? sender, RoutedEventArgs e)
+    public static SettingsWindow For(AppViewModel appVm)
     {
-        if (DataContext is not AppViewModel vm) return;
-        await vm.StartAsync();
+        var window = new SettingsWindow
+        {
+            _appVm = appVm,
+            DataContext = new SettingsViewModel(appVm.Config.DefaultSettings),
+        };
+        return window;
+    }
+
+    private void OnCancel(object? sender, RoutedEventArgs e) => Close();
+
+    private void OnSave(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not SettingsViewModel vm || _appVm is null) { Close(); return; }
+        var settings = vm.ToSettings().Sanitized();
+        _appVm.UpdateDefaultSettings(settings);
+        Close();
     }
 }
