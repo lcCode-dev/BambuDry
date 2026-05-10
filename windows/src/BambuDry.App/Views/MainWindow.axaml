@@ -61,6 +61,29 @@
             <Setter Property="Background" Value="#23232A"/>
             <Setter Property="Foreground" Value="#F0F0F4"/>
         </Style>
+        <Style Selector="ToggleButton.pin">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="6,2"/>
+            <Setter Property="MinWidth" Value="24"/>
+            <Setter Property="Foreground" Value="#7A7A82"/>
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets, Segoe Fluent Icons"/>
+            <Setter Property="FontSize" Value="13"/>
+            <!-- Segoe MDL2 Assets E718 = Pin (outlined) -->
+            <Setter Property="Content" Value="&#xE718;"/>
+        </Style>
+        <Style Selector="ToggleButton.pin:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#23232A"/>
+            <Setter Property="Foreground" Value="#F0F0F4"/>
+        </Style>
+        <Style Selector="ToggleButton.pin:checked">
+            <Setter Property="Foreground" Value="#5AB4DC"/>
+            <!-- E840 = Pinned (filled, diagonal) -->
+            <Setter Property="Content" Value="&#xE840;"/>
+        </Style>
+        <Style Selector="ToggleButton.pin:checked /template/ ContentPresenter">
+            <Setter Property="Background" Value="#1F2D38"/>
+        </Style>
         <Style Selector="ProgressBar.humidity">
             <Setter Property="Height" Value="5"/>
             <Setter Property="Minimum" Value="0"/>
@@ -84,7 +107,7 @@
         <StackPanel>
             <!-- Header (drag handle) -->
             <Border Classes="row" PointerPressed="OnHeaderPressed">
-                <Grid ColumnDefinitions="*,Auto,Auto" VerticalAlignment="Center">
+                <Grid ColumnDefinitions="*,Auto,Auto,Auto" VerticalAlignment="Center">
                     <TextBlock Grid.Column="0" Classes="title"
                                Text="{Binding Config.PrinterName, FallbackValue='BambuDry'}"
                                VerticalAlignment="Center"/>
@@ -94,7 +117,11 @@
                                FontWeight="SemiBold"
                                VerticalAlignment="Center"
                                Margin="0,0,8,0"/>
-                    <Button Grid.Column="2" Classes="icon" Content="✕"
+                    <ToggleButton Grid.Column="2" Classes="pin"
+                                  IsChecked="{Binding IsPinned, Mode=TwoWay}"
+                                  ToolTip.Tip="Pin window — keep open when focus moves to another app"
+                                  VerticalAlignment="Center"/>
+                    <Button Grid.Column="3" Classes="icon" Content="✕"
                             ToolTip.Tip="Hide" Click="OnHide" VerticalAlignment="Center"/>
                 </Grid>
             </Border>

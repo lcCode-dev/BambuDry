@@ -40,6 +40,7 @@ public partial class App : Application
             _mainWindow.Closing += OnMainWindowClosing;
             _mainWindow.Loaded += OnMainWindowLoaded;
             _mainWindow.SizeChanged += OnMainWindowSizeChanged;
+            _mainWindow.Deactivated += OnMainWindowDeactivated;
 
             SetupTrayIcon();
 
@@ -68,6 +69,27 @@ public partial class App : Application
 
     private void OnMainWindowSizeChanged(object? sender, SizeChangedEventArgs e)
         => AnchorToTrayCorner();
+
+    private void OnMainWindowDeactivated(object? sender, System.EventArgs e)
+    {
+        if (_mainWindow is null || _lifetime is null) return;
+        if (ViewModel?.IsPinned == true) return;
+
+        // Defer the focus check so Avalonia has a moment to set the new active
+        // window. If focus moved to another window in OUR app (Settings dialog,
+        // PrinterSetup), don't auto-hide. If focus left the app entirely, hide.
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_mainWindow is null || _lifetime is null) return;
+            if (ViewModel?.IsPinned == true) return;
+            if (_isShuttingDown) return;
+            // _mainWindow.IsActive flips back to true if focus came back to us.
+            if (_mainWindow.IsActive) return;
+            // A child dialog is active — leave the main window visible.
+            if (_lifetime.Windows.Any(w => w != _mainWindow && w.IsActive)) return;
+            _mainWindow.Hide();
+        }, DispatcherPriority.Background);
+    }
 
     /// <summary>
     /// Cap the window so content can never demand more space than the working

@@ -25,6 +25,13 @@ public sealed partial class AppViewModel : ObservableObject
 
     [ObservableProperty] private string? _lastError;
 
+    /// <summary>
+    /// Mac-style pin: when false (default), the dropdown auto-hides on focus
+    /// loss. When true it persists like a regular window. Session-local — the
+    /// user re-pins per launch, matching the macOS MenuBarExtra default.
+    /// </summary>
+    [ObservableProperty] private bool _isPinned;
+
     public bool IsConfigured => Config.IsConfigured;
 
     public string StateText => State switch

@@ -1,7 +1,10 @@
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.VisualTree;
 using BambuDry.App.ViewModels;
 
 namespace BambuDry.App.Views;
@@ -12,7 +15,14 @@ public partial class MainWindow : Window
 
     private void OnHeaderPressed(object? sender, PointerPressedEventArgs e)
     {
-        // Drag the borderless window by its header.
+        // Drag the borderless window by its header — but skip when the press
+        // landed on a child Button / ToggleButton (pin, ✕) so their clicks
+        // don't initiate a drag instead of toggling.
+        if (e.Handled) return;
+        if (e.Source is Control c && (c is Button || c is ToggleButton ||
+            c.GetVisualAncestors().OfType<Button>().Any() ||
+            c.GetVisualAncestors().OfType<ToggleButton>().Any()))
+            return;
         if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
             BeginMoveDrag(e);
     }
