@@ -117,13 +117,12 @@
                                         <TextBlock Classes="subtitle" Text="{Binding Subtitle}"/>
                                     </StackPanel>
                                     <ToggleSwitch Grid.Column="1" Classes="compact"
-                                                  IsChecked="{Binding Settings.Enabled, Mode=OneWay}"
-                                                  IsEnabled="False"
+                                                  IsChecked="{Binding AutoEnabled, Mode=TwoWay}"
                                                   VerticalAlignment="Center"
                                                   Margin="0,0,6,0"/>
                                     <TextBlock Grid.Column="2" Classes="value"
                                                Text="Auto on" FontSize="11"
-                                               IsVisible="{Binding Settings.Enabled}"
+                                               IsVisible="{Binding AutoEnabled}"
                                                VerticalAlignment="Center"/>
                                 </Grid>
 
@@ -156,26 +155,25 @@
                                               BorderThickness="1"
                                               CornerRadius="3"
                                               IsVisible="{Binding IsDrying}"
-                                              IsEnabled="False"
+                                              Click="OnStopRow"
                                               VerticalAlignment="Center"/>
                                     <TextBlock Grid.Column="2" Classes="value" Text="{Binding CurrentTempCText}"
                                                VerticalAlignment="Center"/>
                                 </Grid>
 
                                 <!-- thresholds -->
-                                <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto" Margin="0,2,0,0">
+                                <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto" Margin="0,2,0,0"
+                                      IsVisible="{Binding AutoEnabled}">
                                     <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Start ≥" Margin="0,0,8,0"/>
-                                    <Slider     Grid.Row="0" Grid.Column="1" Minimum="5" Maximum="60"
-                                                Value="{Binding HighThreshold, Mode=OneWay}"
-                                                IsEnabled="False"/>
+                                    <Slider     Grid.Row="0" Grid.Column="1" Minimum="5" Maximum="35" TickFrequency="1" IsSnapToTickEnabled="True"
+                                                Value="{Binding HighThreshold, Mode=TwoWay}"/>
                                     <TextBlock  Grid.Row="0" Grid.Column="2" Classes="value" VerticalAlignment="Center" Margin="8,0,0,0">
                                         <Run Text="{Binding HighThreshold}"/><Run Text="%"/>
                                     </TextBlock>
 
                                     <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="Stop ≤" Margin="0,0,8,0"/>
-                                    <Slider     Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="35"
-                                                Value="{Binding LowThreshold, Mode=OneWay}"
-                                                IsEnabled="False"/>
+                                    <Slider     Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="25" TickFrequency="1" IsSnapToTickEnabled="True"
+                                                Value="{Binding LowThreshold, Mode=TwoWay}"/>
                                     <TextBlock  Grid.Row="1" Grid.Column="2" Classes="value" VerticalAlignment="Center" Margin="8,0,0,0">
                                         <Run Text="{Binding LowThreshold}"/><Run Text="%"/>
                                     </TextBlock>

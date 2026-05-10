@@ -21,6 +21,14 @@ public sealed record AppConfig
         = new Dictionary<string, AutoDrySettings>();
     [JsonPropertyName("defaultSettings")] public AutoDrySettings DefaultSettings { get; init; } = new();
 
+    /// <summary>
+    /// When true, controller decides actions but does NOT publish commands to the
+    /// printer. Defaults to <c>true</c> on first launch so a misconfigured threshold
+    /// can't accidentally fire the heater. Toggleable in Settings → Advanced.
+    /// </summary>
+    [JsonPropertyName("dryRunMode")]      public bool DryRunMode { get; init; } = true;
+    [JsonPropertyName("launchAtLogin")]   public bool LaunchAtLogin { get; init; } = false;
+
     public static AppConfig Empty() => new();
 
     public AutoDrySettings SettingsForAmsId(int id)

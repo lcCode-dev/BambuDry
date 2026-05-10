@@ -49,6 +49,7 @@ public sealed partial class AppViewModel : ObservableObject
     private LanTransport? _transport;
     private Orchestrator? _orchestrator;
     private CancellationTokenSource? _runCts;
+    private CancellationTokenSource? _persistCts;
 
     public AppViewModel(AppConfig config)
     {
@@ -73,15 +74,48 @@ public sealed partial class AppViewModel : ObservableObject
         string.IsNullOrEmpty(Config.Serial) ? null : CredentialStore.Load(Config.Serial);
 
     /// <summary>
-    /// Replace the default per-AMS settings, persist to disk, push to a running
+    /// Replace the default per-AMS settings, persist (debounced), push to a running
     /// orchestrator, and refresh the row VMs so display thresholds update too.
     /// </summary>
     public void UpdateDefaultSettings(AutoDrySettings newDefaults)
     {
-        Config = Config with { DefaultSettings = newDefaults };
-        ConfigStore.Save(Config);
-        _orchestrator?.SetDefaultSettings(newDefaults);
-        foreach (var row in Rows) row.Settings = newDefaults;
+        var sanitized = newDefaults.Sanitized();
+        Config = Config with { DefaultSettings = sanitized };
+        _orchestrator?.SetDefaultSettings(sanitized);
+
+        // Refresh any rows still using the default fallback.
+        foreach (var row in Rows)
+            if (!Config.AmsSettings.ContainsKey(row.AmsId.ToString()))
+                row.ApplyFromSettings(sanitized);
+
+        SchedulePersist();
+    }
+
+    /// <summary>
+    /// Replace per-AMS settings (creates the override if absent), persist
+    /// (debounced), push to the orchestrator, refresh the row.
+    /// </summary>
+    public void UpdateAmsSettings(int amsId, AutoDrySettings settings)
+    {
+        var sanitized = settings.Sanitized();
+        Config = Config with { AmsSettings = WithAms(Config.AmsSettings, amsId, sanitized) };
+        _orchestrator?.SetSettings(sanitized, amsId);
+
+        foreach (var row in Rows)
+            if (row.AmsId == amsId) row.ApplyFromSettings(sanitized);
+
+        SchedulePersist();
+    }
+
+    public async Task ManualStopAsync(int amsId)
+    {
+        if (_transport is null)
+        {
+            LastError = "Not connected — can't send Stop.";
+            return;
+        }
+        try { await _transport.StopDryingAsync(amsId).ConfigureAwait(false); }
+        catch (Exception ex) { LastError = $"Stop failed: {ex.Message}"; }
     }
 
     public async Task StartAsync()
@@ -114,7 +148,7 @@ public sealed partial class AppViewModel : ObservableObject
             {
                 SettingsByAmsId = settingsByAms,
                 DefaultSettings = Config.DefaultSettings,
-                DryRun = true,   // start safe; user can toggle off later
+                DryRun = Config.DryRunMode,
             });
 
             _runCts = new CancellationTokenSource();
@@ -161,8 +195,6 @@ public sealed partial class AppViewModel : ObservableObject
                         case Orchestrator.Event.Observed o:
                             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                             {
-                                // Belt-and-suspenders: if Connected event was missed (e.g. raced past
-                                // first report), promote state on first observed too.
                                 if (State == ConnectionState.Connecting) State = ConnectionState.Connected;
                                 UpsertSnapshot(o.Snapshot);
                             });
@@ -201,12 +233,11 @@ public sealed partial class AppViewModel : ObservableObject
             if (Rows[i].AmsId == snap.AmsId)
             {
                 Rows[i].Snapshot = snap;
-                Rows[i].Settings = settings;
+                Rows[i].ApplyFromSettings(settings);
                 return;
             }
         }
-        Rows.Add(new AmsRowViewModel(snap, settings));
-        // keep stable order by AMS id
+        Rows.Add(new AmsRowViewModel(this, snap, settings));
         var sorted = Rows.OrderBy(r => r.AmsId).ToList();
         Rows.Clear();
         foreach (var r in sorted) Rows.Add(r);
@@ -216,5 +247,38 @@ public sealed partial class AppViewModel : ObservableObject
     {
         foreach (var row in Rows)
             if (row.AmsId == amsId) { row.LastDecision = decision; return; }
+    }
+
+    private static IReadOnlyDictionary<string, AutoDrySettings> WithAms(
+        IReadOnlyDictionary<string, AutoDrySettings> src, int amsId, AutoDrySettings value)
+    {
+        var copy = new Dictionary<string, AutoDrySettings>(src) { [amsId.ToString()] = value };
+        return copy;
+    }
+
+    /// <summary>
+    /// Debounce config saves so a slider drag doesn't write the JSON 60 times
+    /// per second. The orchestrator gets the change immediately; only the
+    /// disk write is deferred.
+    /// </summary>
+    private void SchedulePersist()
+    {
+        _persistCts?.Cancel();
+        _persistCts = new CancellationTokenSource();
+        var ct = _persistCts.Token;
+        var snapshot = Config;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(300, ct).ConfigureAwait(false);
+                ConfigStore.Save(snapshot);
+            }
+            catch (OperationCanceledException) { /* coalesced */ }
+            catch (Exception ex)
+            {
+                Avalonia.Threading.Dispatcher.UIThread.Post(() => LastError = $"Save failed: {ex.Message}");
+            }
+        }, ct);
     }
 }

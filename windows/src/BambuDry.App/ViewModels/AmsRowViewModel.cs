@@ -7,12 +7,18 @@ namespace BambuDry.App.ViewModels;
 
 /// <summary>
 /// One row per AMS unit in the dropdown. Owns the latest snapshot, the latest
-/// controller decision (for the descriptive status line), and the settings
-/// being applied to it (currently always the default settings — per-AMS
-/// overrides are a follow-up).
+/// controller decision (for the descriptive status line), and the editable
+/// per-AMS settings. Property changes route back to <see cref="AppViewModel"/>
+/// for persistence + live-push to the running orchestrator.
 /// </summary>
 public sealed partial class AmsRowViewModel : ObservableObject
 {
+    private readonly AppViewModel _app;
+
+    /// <summary>True while we're applying settings from the parent — suppresses
+    /// the change-handlers from echoing the same values back as a "user edit".</summary>
+    private bool _suppressPush;
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Title), nameof(Subtitle), nameof(HumidityPercent),
         nameof(HumidityPercentText), nameof(HumidityFraction), nameof(CurrentTempCText),
@@ -24,15 +30,24 @@ public sealed partial class AmsRowViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(StatusText), nameof(StatusBrush))]
     private Decision? _lastDecision;
 
+    // Editable per-AMS settings — bindable two-way to the row's controls.
+    [ObservableProperty] private bool _autoEnabled;
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HighThreshold), nameof(LowThreshold), nameof(HumidityBrush),
-        nameof(StatusText))]
-    private AutoDrySettings _settings;
+    [NotifyPropertyChangedFor(nameof(HumidityBrush))]
+    private int _highThreshold;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HumidityBrush))]
+    private int _lowThreshold;
+    [ObservableProperty] private int _minOnMinutes;
+    [ObservableProperty] private int _minOffMinutes;
+    [ObservableProperty] private bool _runDuringPrint;
+    [ObservableProperty] private int _targetTemp;
 
-    public AmsRowViewModel(AmsSnapshot snapshot, AutoDrySettings settings)
+    public AmsRowViewModel(AppViewModel app, AmsSnapshot snapshot, AutoDrySettings settings)
     {
+        _app = app;
         _snapshot = snapshot;
-        _settings = settings;
+        ApplyFromSettings(settings);
     }
 
     public int AmsId => Snapshot.AmsId;
@@ -41,10 +56,10 @@ public sealed partial class AmsRowViewModel : ObservableObject
 
     public string Subtitle => Snapshot.Model switch
     {
-        AmsModel.N3F => "(AMS 2 Pro)",
-        AmsModel.N3S => "(AMS HT)",
-        AmsModel.AmsLite => "(AMS Lite)",
-        AmsModel.Ams => "(AMS)",
+        AmsModel.N3F      => "(AMS 2 Pro)",
+        AmsModel.N3S      => "(AMS HT)",
+        AmsModel.AmsLite  => "(AMS Lite)",
+        AmsModel.Ams      => "(AMS)",
         AmsModel.ExtSpool => "(External spool)",
         _ => string.Empty,
     };
@@ -52,14 +67,52 @@ public sealed partial class AmsRowViewModel : ObservableObject
     public bool SupportsDrying => Snapshot.SupportsDrying;
     public bool IsDrying => Snapshot.IsCurrentlyDrying;
 
-    public int? HumidityPercent => Snapshot.HumidityPercent;
+    public int? HumidityPercent     => Snapshot.HumidityPercent;
     public string HumidityPercentText => HumidityPercent is int rh ? $"{rh}%" : "—";
-    public double HumidityFraction => HumidityPercent is int rh ? rh / 100.0 : 0;
+    public double HumidityFraction  => HumidityPercent is int rh ? rh / 100.0 : 0;
 
     public string CurrentTempCText => Snapshot.CurrentTempC is double t ? $"{t:0.0}°C" : "—";
 
-    public int HighThreshold => Settings.HighThreshold;
-    public int LowThreshold => Settings.LowThreshold;
+    /// <summary>Re-seed editable properties from a settings object (e.g. from disk).</summary>
+    public void ApplyFromSettings(AutoDrySettings s)
+    {
+        _suppressPush = true;
+        AutoEnabled    = s.Enabled;
+        HighThreshold  = s.HighThreshold;
+        LowThreshold   = s.LowThreshold;
+        MinOnMinutes   = s.MinOnMinutes;
+        MinOffMinutes  = s.MinOffMinutes;
+        RunDuringPrint = s.RunDuringPrint;
+        TargetTemp     = s.TargetTemp;
+        _suppressPush = false;
+    }
+
+    public AutoDrySettings BuildSettings() => new()
+    {
+        Enabled        = AutoEnabled,
+        HighThreshold  = HighThreshold,
+        LowThreshold   = LowThreshold,
+        MinOnMinutes   = MinOnMinutes,
+        MinOffMinutes  = MinOffMinutes,
+        RunDuringPrint = RunDuringPrint,
+        TargetTemp     = TargetTemp == 0 ? 45 : TargetTemp,
+    };
+
+    partial void OnAutoEnabledChanged(bool value)    => MaybePush();
+    partial void OnHighThresholdChanged(int value)   => MaybePush();
+    partial void OnLowThresholdChanged(int value)    => MaybePush();
+    partial void OnMinOnMinutesChanged(int value)    => MaybePush();
+    partial void OnMinOffMinutesChanged(int value)   => MaybePush();
+    partial void OnRunDuringPrintChanged(bool value) => MaybePush();
+    partial void OnTargetTempChanged(int value)      => MaybePush();
+
+    private void MaybePush()
+    {
+        if (_suppressPush) return;
+        _app.UpdateAmsSettings(AmsId, BuildSettings());
+    }
+
+    public void RequestManualStop() => _ = _app.ManualStopAsync(AmsId);
 
     /// <summary>Color of the humidity bar based on snapshot + thresholds.</summary>
     public IBrush HumidityBrush
@@ -68,26 +121,25 @@ public sealed partial class AmsRowViewModel : ObservableObject
         {
             if (IsDrying) return Brushes.OrangeRed;
             if (HumidityPercent is not int rh) return Brushes.Gray;
-            if (rh >= Settings.HighThreshold) return Brushes.OrangeRed;
-            if (rh > Settings.LowThreshold)   return Brushes.Goldenrod;
-            return new SolidColorBrush(Color.FromRgb(0x4C, 0xAF, 0x50));   // green
+            if (rh >= HighThreshold) return Brushes.OrangeRed;
+            if (rh > LowThreshold)   return Brushes.Goldenrod;
+            return new SolidColorBrush(Color.FromRgb(0x4C, 0xAF, 0x50));
         }
     }
 
-    /// <summary>Status line below humidity. Mirrors macOS AmsRowView's status helper.</summary>
     public string StatusText
     {
         get
         {
-            if (!SupportsDrying)             return "Heater not supported";
-            if (HumidityPercent is null)     return "Humidity unknown";
+            if (!SupportsDrying)         return "Heater not supported";
+            if (HumidityPercent is null) return "Humidity unknown";
 
             return LastDecision switch
             {
-                Decision.Start    => "Heat command sent",
-                Decision.Stop     => "Stop command sent",
-                Decision.Noop n   => StatusFromNoop(n.Reason),
-                _                 => IsDrying ? "Dehumidifying" : "Idle",
+                Decision.Start  => "Heat command sent",
+                Decision.Stop   => "Stop command sent",
+                Decision.Noop n => StatusFromNoop(n.Reason),
+                _               => IsDrying ? "Dehumidifying" : "Idle",
             };
         }
     }

@@ -35,4 +35,10 @@ public partial class MainWindow : Window
     {
         if (Application.Current is App app) app.QuitApp();
     }
+
+    private void OnStopRow(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control c && c.DataContext is AmsRowViewModel row)
+            row.RequestManualStop();
+    }
 }
