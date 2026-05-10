@@ -27,7 +27,13 @@ public partial class MainWindow : Window
             BeginMoveDrag(e);
     }
 
-    private void OnHide(object? sender, RoutedEventArgs e) => Hide();
+    private void OnHide(object? sender, RoutedEventArgs e)
+    {
+        // Route through Close() so our Closing handler in App.axaml.cs runs:
+        // it captures the pinned position before flipping Cancel=true + Hide.
+        // Calling Hide() directly skipped that path and lost the saved position.
+        Close();
+    }
 
     private void OnOpenSetup(object? sender, RoutedEventArgs e)
     {
