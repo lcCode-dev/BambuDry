@@ -5,6 +5,7 @@
         x:DataType="vm:AppViewModel"
         Width="380"
         Title="BambuDry"
+        Icon="/Assets/app.ico"
         SystemDecorations="None"
         CanResize="False"
         SizeToContent="Height"

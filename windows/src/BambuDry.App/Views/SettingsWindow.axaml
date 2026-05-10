@@ -5,6 +5,7 @@
         x:DataType="vm:SettingsViewModel"
         Width="520" Height="500"
         Title="BambuDry settings"
+        Icon="/Assets/app.ico"
         WindowStartupLocation="CenterOwner">
 
     <Window.Styles>

@@ -15,13 +15,20 @@ That's it.
 
 | Platform | Status | Download |
 |----------|--------|----------|
-| **macOS** (13 Ventura+) | Working | [Build from source](macos/README.md) |
-| **Windows** (10/11) | Planned | — |
+| **macOS** (13 Ventura+) | Working | [Latest .dmg](https://github.com/lcCode-dev/BambuDry/releases) |
+| **Windows** (10 1809+ / 11) | Working | [Latest .exe installer](https://github.com/lcCode-dev/BambuDry/releases) |
 
-The macOS version is a SwiftUI menu bar app, daily-driver tested against an
-AMS 2 Pro and two AMS HT units. Windows port is in planning — likely Avalonia
-(C#/.NET) so the UI matches Windows native conventions while sharing logic
-with the Mac version.
+The macOS version is a SwiftUI menu bar app. The Windows version is an
+Avalonia 11 / .NET 8 port that mirrors the macOS feature set: tray icon
+with a borderless dropdown, per-AMS humidity bars / Auto toggles /
+threshold sliders / manual Stop, tabbed Settings (Printer / Defaults /
+Advanced) with launch-at-login, dry-run, and a recent-publishes log.
+
+Both implementations share the wire format documented in
+[docs/PROTOCOL.md](docs/PROTOCOL.md). The pure-logic hysteresis controller
++ MQTT message types are implemented in Swift on macOS
+(`macos/Sources/BambuDryCore/`) and in C# on Windows
+(`windows/src/BambuDry.Core/`), with mirrored test suites on each side.
 
 ## Why it exists
 
@@ -44,14 +51,15 @@ gentle and brief instead of long and hot.
 ```
 bambudry/
 ├── docs/                     ← shared protocol documentation, screenshots
-├── macos/                    ← SwiftUI menu bar app (current)
-└── windows/                  ← Avalonia port (planned)
+├── macos/                    ← SwiftUI menu bar app
+└── windows/                  ← Avalonia 11 / .NET 8 desktop app
 ```
 
-The macOS version's `BambuDryCore` package contains the pure-Swift hysteresis
-controller and MQTT message types — when the Windows port lands, those same
-shapes will be implemented in C#, both targeting the wire protocol documented
-in [docs/PROTOCOL.md](docs/PROTOCOL.md).
+Both apps share the wire format documented in
+[docs/PROTOCOL.md](docs/PROTOCOL.md). The pure-logic hysteresis + MQTT
+message types are mirrored in Swift (`macos/Sources/BambuDryCore/`) and
+C# (`windows/src/BambuDry.Core/`), each with their own test suite that
+validates the same `ams_report.json` fixture verbatim.
 
 ## Tip jar
 

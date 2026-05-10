@@ -5,6 +5,7 @@
         x:DataType="vm:AppViewModel"
         Width="440" Height="380"
         Title="Add your Bambu printer"
+        Icon="/Assets/app.ico"
         WindowStartupLocation="CenterOwner"
         SizeToContent="Manual">
     <Grid Margin="16" RowDefinitions="Auto,Auto,*,Auto">

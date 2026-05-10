@@ -11,3 +11,7 @@ obj/
 .vs/
 .idea/
 *.suo
+
+# Installer build artefacts
+windows/installer/publish/
+windows/installer/output/

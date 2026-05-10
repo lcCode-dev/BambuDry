@@ -6,6 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <RootNamespace>BambuDry.App</RootNamespace>
     <AssemblyName>BambuDry</AssemblyName>
@@ -30,5 +31,6 @@
 
   <ItemGroup>
     <AvaloniaResource Include="Assets\*.png" />
+    <AvaloniaResource Include="Assets\app.ico" />
   </ItemGroup>
 </Project>

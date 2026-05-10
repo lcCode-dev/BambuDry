@@ -1,0 +1,250 @@
+# Builds, signs, and packages BambuDry as a Windows .exe installer on every
+# push to main. Tag pushes (v*) also attach the .exe to a GitHub Release.
+# Manual runs are supported via the workflow_dispatch trigger.
+#
+# Mirrors the macOS DMG workflow (.github/workflows/build-dmg.yml) in shape
+# and lifecycle (rolling `latest-windows` pre-release vs. tagged stable releases).
+#
+# Code signing uses Azure Trusted Signing (https://learn.microsoft.com/azure/trusted-signing/)
+# via OIDC federated credentials — no long-lived client secret stored in GitHub.
+# When the AZURE_* secrets aren't populated the workflow still builds the
+# installer but skips signing, so contributors can produce working binaries
+# from forks/PRs without access to the signing account.
+#
+# Required repository secrets (set: Repo → Settings → Secrets and variables → Actions):
+#
+#   AZURE_TENANT_ID         Microsoft Entra tenant ID hosting the Trusted Signing account
+#   AZURE_CLIENT_ID         App registration / Workload Identity client ID with the
+#                           "Trusted Signing Certificate Profile Signer" role on the
+#                           Trusted Signing Account. Configure OIDC federation for
+#                           this repo: subject "repo:lcCode-dev/BambuDry:ref:refs/heads/main"
+#                           (and similar for tags/PRs as needed).
+#   AZURE_SUBSCRIPTION_ID   Subscription containing the Trusted Signing Account
+#   AZURE_TS_ENDPOINT       Region endpoint, e.g. https://eus.codesigning.azure.net/
+#   AZURE_TS_ACCOUNT        Name of the Trusted Signing Account
+#   AZURE_TS_PROFILE        Name of the certificate profile (Public Trust)
+#
+# Identity validation in the Trusted Signing portal takes 1–3 business days.
+# Until that's complete the cert profile won't be issued and signing will fail
+# even with all secrets in place.
+
+name: Build Windows installer
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write     # required for attaching the installer to a GitHub Release
+  id-token: write     # required for Azure OIDC federated credentials
+
+concurrency:
+  group: build-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-installer:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore + build solution
+        working-directory: windows
+        run: dotnet build BambuDry.sln -c Release --nologo
+
+      - name: Run unit tests
+        working-directory: windows
+        run: dotnet test tests/BambuDry.Core.Tests/BambuDry.Core.Tests.csproj --no-build -c Release --nologo --verbosity normal
+
+      - name: Resolve version + filenames
+        id: meta
+        shell: pwsh
+        run: |
+          # Tag pushes (v0.1.0 → 0.1.0). Branch pushes use the AppConfig
+          # default until we wire <Version> into BambuDry.App.csproj proper.
+          if ('${{ github.ref }}'.StartsWith('refs/tags/v')) {
+            $version = '${{ github.ref_name }}' -replace '^v', ''
+          } else {
+            $version = '0.1.0'
+          }
+          $shortSha = '${{ github.sha }}'.Substring(0, 7)
+          $installer = "BambuDry-$version-$shortSha-Setup"
+          "version=$version"            | Out-File $env:GITHUB_OUTPUT -Append
+          "short-sha=$shortSha"         | Out-File $env:GITHUB_OUTPUT -Append
+          "installer-stem=$installer"   | Out-File $env:GITHUB_OUTPUT -Append
+          "installer-path=windows/installer/output/$installer.exe" | Out-File $env:GITHUB_OUTPUT -Append
+
+      - name: Publish self-contained build (win-x64)
+        # Self-contained bundles the .NET runtime so end users don't need to
+        # install .NET 8 separately. PublishSingleFile=false leaves the DLLs
+        # alongside the .exe — Avalonia 11 + single-file has had occasional
+        # asset-loading edge cases; keeping multi-file is the safer default.
+        working-directory: windows
+        run: |
+          dotnet publish src\BambuDry.App `
+            -c Release -r win-x64 --self-contained true `
+            -p:PublishSingleFile=false `
+            -p:Version=${{ steps.meta.outputs.version }} `
+            -o installer\publish
+        shell: pwsh
+
+      - name: Check Azure Trusted Signing secret presence
+        id: signing
+        shell: bash
+        run: |
+          missing=()
+          [ -z "${{ secrets.AZURE_TENANT_ID }}" ]       && missing+=("AZURE_TENANT_ID")
+          [ -z "${{ secrets.AZURE_CLIENT_ID }}" ]       && missing+=("AZURE_CLIENT_ID")
+          [ -z "${{ secrets.AZURE_SUBSCRIPTION_ID }}" ] && missing+=("AZURE_SUBSCRIPTION_ID")
+          [ -z "${{ secrets.AZURE_TS_ENDPOINT }}" ]     && missing+=("AZURE_TS_ENDPOINT")
+          [ -z "${{ secrets.AZURE_TS_ACCOUNT }}" ]      && missing+=("AZURE_TS_ACCOUNT")
+          [ -z "${{ secrets.AZURE_TS_PROFILE }}" ]      && missing+=("AZURE_TS_PROFILE")
+          if [ ${#missing[@]} -eq 0 ]; then
+            echo "has-secrets=true" >> "$GITHUB_OUTPUT"
+            echo "All Azure Trusted Signing secrets present — will sign artifacts."
+          else
+            echo "has-secrets=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Building unsigned::Missing Azure Trusted Signing secrets: ${missing[*]}. The workflow will still produce a working installer, but downloaders will see SmartScreen warnings."
+          fi
+
+      - name: Azure login (OIDC)
+        if: steps.signing.outputs.has-secrets == 'true'
+        uses: azure/login@v2
+        with:
+          client-id:       ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id:       ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Sign published binaries
+        if: steps.signing.outputs.has-secrets == 'true'
+        uses: azure/trusted-signing-action@v0.5.1
+        with:
+          endpoint:                       ${{ secrets.AZURE_TS_ENDPOINT }}
+          trusted-signing-account-name:   ${{ secrets.AZURE_TS_ACCOUNT }}
+          certificate-profile-name:       ${{ secrets.AZURE_TS_PROFILE }}
+          files-folder:                   windows\installer\publish
+          files-folder-filter:            exe,dll
+          files-folder-recurse:           true
+          file-digest:                    SHA256
+          timestamp-rfc3161:              http://timestamp.acs.microsoft.com
+          timestamp-digest:               SHA256
+
+      - name: Install Inno Setup
+        # `choco` is pre-installed on windows-latest. Inno Setup 6 lives at
+        # "C:\Program Files (x86)\Inno Setup 6\iscc.exe" after this step.
+        run: choco install innosetup --no-progress -y
+        shell: pwsh
+
+      - name: Compile installer
+        working-directory: windows\installer
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\iscc.exe" `
+            /DMyAppVersion=${{ steps.meta.outputs.version }} `
+            /DPublishDir=publish `
+            /F"${{ steps.meta.outputs.installer-stem }}" `
+            BambuDry.iss
+
+      - name: Sign installer
+        if: steps.signing.outputs.has-secrets == 'true'
+        uses: azure/trusted-signing-action@v0.5.1
+        with:
+          endpoint:                       ${{ secrets.AZURE_TS_ENDPOINT }}
+          trusted-signing-account-name:   ${{ secrets.AZURE_TS_ACCOUNT }}
+          certificate-profile-name:       ${{ secrets.AZURE_TS_PROFILE }}
+          files-folder:                   windows\installer\output
+          files-folder-filter:            exe
+          file-digest:                    SHA256
+          timestamp-rfc3161:              http://timestamp.acs.microsoft.com
+          timestamp-digest:               SHA256
+
+      - name: Verify installer signature
+        if: steps.signing.outputs.has-secrets == 'true'
+        shell: pwsh
+        run: |
+          $sig = Get-AuthenticodeSignature "${{ steps.meta.outputs.installer-path }}"
+          if ($sig.Status -ne 'Valid') {
+            Write-Error "Installer signature invalid: $($sig.Status) — $($sig.StatusMessage)"
+            exit 1
+          }
+          Write-Host "Installer signed by: $($sig.SignerCertificate.Subject)"
+          Write-Host "Timestamp: $($sig.TimeStamperCertificate.Subject)"
+
+      - name: Upload installer as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BambuDry-windows-installer
+          path: ${{ steps.meta.outputs.installer-path }}
+          retention-days: 90
+
+      # Rolling "Latest Windows build" pre-release: every push to main moves
+      # `latest-windows` to the new commit and refreshes the attached installer.
+      # Marked as a pre-release (and make_latest=false) so this rolling build
+      # never displaces a tagged stable release in the GitHub UI.
+      #
+      # Uses a different tag (`latest-windows`) from the macOS workflow's
+      # `latest` so the two rolling builds don't race on the same release.
+      - name: Move 'latest-windows' tag to current commit
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          git tag -f latest-windows
+          git push -f origin latest-windows
+
+      - name: Purge stale assets from rolling release
+        # softprops/action-gh-release only clobbers same-named files. Since
+        # the installer name embeds the commit SHA, each push appends rather
+        # than replaces. Wipe all existing assets first so the rolling release
+        # always shows exactly one .exe — the one matching the current SHA.
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          if gh release view latest-windows --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release view latest-windows --repo "$GITHUB_REPOSITORY" \
+              --json assets --jq '.assets[].name' \
+              | while read -r asset; do
+                  echo "Deleting stale asset: $asset"
+                  gh release delete-asset latest-windows "$asset" \
+                    --repo "$GITHUB_REPOSITORY" --yes
+                done
+          else
+            echo "No prior 'latest-windows' release; nothing to purge."
+          fi
+
+      - name: Update rolling 'Latest Windows build' pre-release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-windows
+          name: "Latest Windows build (from main)"
+          prerelease: true
+          make_latest: false
+          files: ${{ steps.meta.outputs.installer-path }}
+          body: |
+            Auto-built from the most recent commit on `main`.
+
+            **Commit:** [`${{ github.sha }}`](https://github.com/${{ github.repository }}/commit/${{ github.sha }})
+            **Message:** ${{ github.event.head_commit.message }}
+
+            Replaced on every push. For pinned versions, see the tagged releases below.
+
+      # Versioned release: pushed when a `v*` tag is created, attaches the
+      # same installer to a permanent release with auto-generated notes.
+      - name: Attach installer to versioned release (tag pushes only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.meta.outputs.installer-path }}
+          generate_release_notes: true
