@@ -4,8 +4,10 @@ using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform;
+using Avalonia.Threading;
 using BambuDry.App.Storage;
 using BambuDry.App.ViewModels;
 using BambuDry.App.Views;
@@ -36,7 +38,8 @@ public partial class App : Application
             // Keep the app alive when the main window is closed — tray stays.
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
             _mainWindow.Closing += OnMainWindowClosing;
-            _mainWindow.Opened += OnMainWindowOpened;
+            _mainWindow.Loaded += OnMainWindowLoaded;
+            _mainWindow.SizeChanged += OnMainWindowSizeChanged;
 
             SetupTrayIcon();
 
@@ -57,23 +60,60 @@ public partial class App : Application
         _mainWindow.Hide();
     }
 
-    private void OnMainWindowOpened(object? sender, System.EventArgs e)
+    private void OnMainWindowLoaded(object? sender, RoutedEventArgs e)
     {
-        // First-show only: anchor to the bottom-right of the working area, near
-        // the tray icon. After this fires once, Avalonia preserves the user's
-        // dragged position across Hide()/Show() cycles.
+        ApplyMaxHeight();
+        AnchorToTrayCorner();
+    }
+
+    private void OnMainWindowSizeChanged(object? sender, SizeChangedEventArgs e)
+        => AnchorToTrayCorner();
+
+    /// <summary>
+    /// Cap the window so content can never demand more space than the working
+    /// area. The inner ScrollViewer kicks in if there are more AMS rows than
+    /// the screen can show — better than overflowing the taskbar.
+    /// </summary>
+    private void ApplyMaxHeight()
+    {
         if (_mainWindow is null) return;
         var screen = _mainWindow.Screens.Primary ?? _mainWindow.Screens.ScreenFromVisual(_mainWindow);
         if (screen is null) return;
+        // WorkingArea is physical pixels; MaxHeight is DIPs.
+        _mainWindow.MaxHeight = (screen.WorkingArea.Height / screen.Scaling) - 24;
+    }
+
+    /// <summary>
+    /// Snap the borderless dropdown to the bottom-right of the primary screen's
+    /// working area, accounting for the taskbar AND DPI scaling. Called on
+    /// initial Loaded, on every SizeChanged (so the window grows UPWARD as AMS
+    /// rows arrive instead of overflowing the taskbar), and on every
+    /// tray-driven Show.
+    /// </summary>
+    private void AnchorToTrayCorner()
+    {
+        if (_mainWindow is null) return;
+        var screen = _mainWindow.Screens.Primary ?? _mainWindow.Screens.ScreenFromVisual(_mainWindow);
+        if (screen is null) return;
+
+        // Bounds is in DIPs; Position + WorkingArea are in physical pixels.
+        // Convert before arithmetic, otherwise on a 150% scaled display the
+        // window lands ~half off-screen.
+        var wDip = _mainWindow.Bounds.Width;
+        var hDip = _mainWindow.Bounds.Height;
+        if (wDip <= 0 || hDip <= 0) return;
+
+        var scale = screen.Scaling;
+        var wPx       = (int)(wDip * scale);
+        var hPx       = (int)(hDip * scale);
+        var marginPx  = (int)(12   * scale);
+
         var wa = screen.WorkingArea;
-        var w  = (int)_mainWindow.Bounds.Width;
-        var h  = (int)_mainWindow.Bounds.Height;
-        if (w <= 0) w = 380;
-        if (h <= 0) h = 480;
-        var x = wa.X + wa.Width  - w - 12;
-        var y = wa.Y + wa.Height - h - 12;
-        _mainWindow.Position = new Avalonia.PixelPoint(x, y);
-        _mainWindow.Opened -= OnMainWindowOpened; // first show only
+        var newPos = new PixelPoint(
+            wa.X + wa.Width  - wPx - marginPx,
+            wa.Y + wa.Height - hPx - marginPx);
+        if (_mainWindow.Position != newPos)
+            _mainWindow.Position = newPos;
     }
 
     public void QuitApp() => Quit();
@@ -116,6 +156,11 @@ public partial class App : Application
         if (_mainWindow.WindowState == WindowState.Minimized)
             _mainWindow.WindowState = WindowState.Normal;
         _mainWindow.Activate();
+
+        // Re-anchor after Show, deferred until layout settles. Without this,
+        // Show() can leave the window at its previous (possibly stale) position
+        // before SizeChanged fires.
+        Dispatcher.UIThread.Post(AnchorToTrayCorner, DispatcherPriority.Loaded);
     }
 
     private void Quit()
