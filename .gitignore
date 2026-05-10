@@ -3,3 +3,11 @@
 *.xcodeproj/
 DerivedData/
 .DS_Store
+
+# Windows / .NET
+bin/
+obj/
+*.user
+.vs/
+.idea/
+*.suo

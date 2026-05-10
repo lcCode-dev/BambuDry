@@ -1,47 +1,71 @@
-# BambuDry — Windows port (planned)
+# BambuDry — Windows port
 
-The Windows port hasn't started yet. Likely stack: **Avalonia UI** (C#/.NET 8)
-so the same codebase can also be a viable cross-platform alternative to the
-SwiftUI macOS version long-term.
+C# / .NET 8 / Avalonia 11 port of the macOS app. **In progress** on the
+`windows-port` branch — a working foundation is in place but the UI is
+deliberately minimal pending iteration.
 
-## Why Avalonia
+## Status
 
-- Excellent Windows-native feel (XAML / DataTemplates similar to WPF)
-- Cross-platform — same codebase could replace the SwiftUI Mac version eventually
-- `MQTTnet` is the canonical .NET MQTT library, supports TLS with custom cert
-  validation (matches our self-signed-cert requirement)
-- System tray support via `TrayIcon`, similar UX to `MenuBarExtra`
-- Microsoft Store and direct-download distribution both straightforward
+| Layer | Status | Notes |
+|---|---|---|
+| `BambuDry.Core` | ✅ done | Pure-C# port of macOS `BambuDryCore`. No platform deps. |
+| `BambuDry.Core.Tests` | ✅ 25/25 passing | xUnit port of the XCTest suite, including the `ams_report.json` fixture verbatim. |
+| MQTTnet `LanTransport` | ✅ compiles | Untested against a real printer yet; structure mirrors the Swift `LANTransport`. |
+| Settings storage | ✅ done | `%APPDATA%\BambuDry\config.json`, schema matches Mac `AppConfig`. |
+| Credential storage | ✅ done | Windows Credential Manager via `Meziantou.Framework.Win32.CredentialManager`, target name `dev.lcCode.BambuDry\<serial>`. |
+| Launch at login | ✅ done | `HKCU\…\Run` registry write. |
+| Avalonia app shell | 🟡 minimal | Setup window works; main window shows live AMS snapshots; settings UI is read-only placeholder. |
+| System tray icon | 🔴 not yet | Will replace `MainWindow` as the primary entry point. |
+| CI workflow | 🔴 not yet | `build-windows.yml` to mirror `build-dmg.yml` once a working build exists. |
 
-## Scope
+## Layout
 
-The plan is to mirror the macOS feature set 1:1:
+```
+windows/
+├── BambuDry.sln
+├── src/
+│   ├── BambuDry.Core/          ← pure-C# port of macOS BambuDryCore
+│   │   ├── Models/Models.cs    ← AmsModel, DryStatus, AutoDrySettings, AmsSnapshot
+│   │   ├── Net/Messages.cs     ← DryRequest, ReportEnvelope, AmsReport bitfield decode
+│   │   ├── Net/LanTransport.cs ← MQTTnet wrapper (TLS, bblp/<code>, pushall)
+│   │   └── Control/            ← AutoDryController hysteresis, Orchestrator
+│   └── BambuDry.App/           ← Avalonia desktop app
+│       ├── ViewModels/         ← AppViewModel (CommunityToolkit.Mvvm)
+│       ├── Views/              ← MainWindow, PrinterSetupWindow, SettingsWindow
+│       ├── Storage/            ← AppConfig, ConfigStore, CredentialStore
+│       └── Services/           ← LaunchAtLogin
+└── tests/
+    └── BambuDry.Core.Tests/
+        ├── AutoDryControllerTests.cs   ← 13 tests, port of macOS suite
+        ├── MessagesTests.cs            ← 9 tests incl. fixture decode
+        └── Fixtures/ams_report.json    ← copied verbatim from macos/
+```
 
-- Menu/system-tray icon with humidity status
-- Click → dropdown showing one row per AMS with humidity bar, Auto toggle,
-  thresholds, manual Stop
-- Pinnable window (standard WPF/Avalonia window suffices — no special tricks
-  needed since Windows doesn't have macOS's `MenuBarExtra` IPC quirks)
-- Settings window with Printer / Defaults / Advanced tabs
-- Run-at-login via Task Scheduler or HKCU `Run` registry key
-- Credential storage in DPAPI (`ProtectedData.Protect`)
-- Config in `%APPDATA%/BambuDry/config.json`
+## Building locally
 
-## What's portable from `macos/Sources/BambuDryCore`
+```powershell
+# from repo root
+dotnet build windows\BambuDry.sln
+dotnet test  windows\tests\BambuDry.Core.Tests
+dotnet run   --project windows\src\BambuDry.App
+```
 
-The pure-Swift core is small (~700 lines) and contains no Apple-specific APIs:
+## Cross-platform parity
 
-- `AutoDryController` — hysteresis state machine
-- `Models` — settings, snapshots, enums
-- `Messages` — Codable wire format (start/stop/report)
-- `Orchestrator` — ties them together
+The protocol shapes in `BambuDry.Core` are a near-mechanical translation of
+`macos/Sources/BambuDryCore/`. Both implementations target the wire protocol
+documented in [../docs/PROTOCOL.md](../docs/PROTOCOL.md).
 
-A C# port of the above should be a near-mechanical translation. The protocol
-shapes are documented in [../docs/PROTOCOL.md](../docs/PROTOCOL.md), so any
-future implementation can target that spec directly without diving into the
-Swift code.
+- Settings JSON schema matches macOS byte-for-byte (`printerName`, `serial`,
+  `lanIP`, `amsSettings: { "<id>": {...} }`, `defaultSettings`).
+- Credential record naming matches macOS Keychain (`dev.lcCode.BambuDry`,
+  account = printer serial).
+- The 8 `MessagesTests` and 13 `AutoDryControllerTests` mirror their Swift
+  counterparts case-for-case.
 
-## Estimated effort
+## Next steps
 
-3–4 weeks part-time for a polished Windows release including code signing
-and an installer (Inno Setup or WiX).
+1. SettingsViewModel for editable two-way bindings (Core stays immutable; UI gets a mutable wrapper).
+2. System tray icon + borderless dropdown popup (Avalonia `TrayIcon`).
+3. End-to-end test against a real printer on LAN (reconnect logic, dry-run mode).
+4. `.github/workflows/build-windows.yml` mirroring the macOS DMG workflow.

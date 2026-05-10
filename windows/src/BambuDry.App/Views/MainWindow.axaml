@@ -1,0 +1,50 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:BambuDry.App.ViewModels"
+        xmlns:core="clr-namespace:BambuDry.Core;assembly=BambuDry.Core"
+        x:Class="BambuDry.App.Views.MainWindow"
+        x:DataType="vm:AppViewModel"
+        Width="380" Height="520"
+        Title="BambuDry"
+        WindowStartupLocation="CenterScreen">
+    <Grid RowDefinitions="Auto,*,Auto" Margin="16">
+        <StackPanel Grid.Row="0" Spacing="2">
+            <TextBlock Text="{Binding Config.PrinterName}" FontSize="16" FontWeight="SemiBold"/>
+            <TextBlock Text="{Binding State}" Opacity="0.7" FontSize="12"/>
+            <TextBlock Text="{Binding LastError}" Foreground="OrangeRed" FontSize="12"
+                       IsVisible="{Binding LastError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="1" Margin="0,12,0,12">
+            <ItemsControl ItemsSource="{Binding AmsSnapshots}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="core:AmsSnapshot">
+                        <Border CornerRadius="6" Padding="10" Margin="0,0,0,8"
+                                BorderBrush="{DynamicResource SystemBaseLowColor}" BorderThickness="1">
+                            <StackPanel Spacing="4">
+                                <TextBlock>
+                                    <Run Text="AMS "/><Run Text="{Binding AmsId}"/>
+                                    <Run Text=" — "/><Run Text="{Binding Model}"/>
+                                </TextBlock>
+                                <TextBlock>
+                                    <Run Text="Humidity: "/><Run Text="{Binding HumidityPercent, TargetNullValue='—'}"/><Run Text="%"/>
+                                </TextBlock>
+                                <TextBlock>
+                                    <Run Text="Temp: "/><Run Text="{Binding CurrentTempC, TargetNullValue='—'}"/><Run Text=" °C"/>
+                                </TextBlock>
+                                <TextBlock Text="Drying" Foreground="OrangeRed" FontWeight="SemiBold"
+                                           IsVisible="{Binding IsCurrentlyDrying}"/>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+            <Button Content="Setup…" Click="OnOpenSetup"/>
+            <Button Content="Settings…" Click="OnOpenSettings"/>
+            <Button Content="Reconnect" Click="OnReconnect"/>
+        </StackPanel>
+    </Grid>
+</Window>

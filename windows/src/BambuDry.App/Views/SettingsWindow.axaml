@@ -1,0 +1,32 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:BambuDry.App.ViewModels"
+        x:Class="BambuDry.App.Views.SettingsWindow"
+        x:DataType="vm:AppViewModel"
+        Width="480" Height="380"
+        Title="BambuDry settings"
+        WindowStartupLocation="CenterOwner">
+    <!--
+      Foundation commit: read-only display of current defaults. An editable
+      SettingsViewModel that wraps AutoDrySettings (which is immutable in Core)
+      is the next step. For now, edit config.json directly and Reconnect.
+    -->
+    <Grid Margin="16" RowDefinitions="Auto,*,Auto">
+        <TextBlock Grid.Row="0" Text="Defaults (read-only — editable UI is next)" FontWeight="SemiBold" Margin="0,0,0,8"/>
+        <ScrollViewer Grid.Row="1">
+            <StackPanel Spacing="6" DataContext="{Binding Config.DefaultSettings}">
+                <TextBlock><Run Text="Enabled by default: "/><Run Text="{Binding Enabled}"/></TextBlock>
+                <TextBlock><Run Text="Run during prints: "/><Run Text="{Binding RunDuringPrint}"/></TextBlock>
+                <TextBlock><Run Text="Start ≥ "/><Run Text="{Binding HighThreshold}"/><Run Text=" %RH"/></TextBlock>
+                <TextBlock><Run Text="Stop ≤ "/><Run Text="{Binding LowThreshold}"/><Run Text=" %RH"/></TextBlock>
+                <TextBlock><Run Text="Min on: "/><Run Text="{Binding MinOnMinutes}"/><Run Text=" minutes"/></TextBlock>
+                <TextBlock><Run Text="Min off: "/><Run Text="{Binding MinOffMinutes}"/><Run Text=" minutes"/></TextBlock>
+                <TextBlock><Run Text="Target temp: "/><Run Text="{Binding TargetTemp}"/><Run Text=" °C"/></TextBlock>
+            </StackPanel>
+        </ScrollViewer>
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,12,0,0">
+            <Button Content="Reconnect" Click="OnReconnect"/>
+            <Button Content="Close" Click="OnClose"/>
+        </StackPanel>
+    </Grid>
+</Window>
