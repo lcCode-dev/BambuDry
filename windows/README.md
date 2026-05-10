@@ -8,18 +8,21 @@ the same MQTT wire format documented in
 
 | Layer | Status | Notes |
 |---|---|---|
-| `BambuDry.Core` | ✅ shipping | Pure C# port of the Swift core; no platform deps. |
+| `BambuDry.Core` | ✅ shipping | Pure-C# port of the Swift core. No platform deps. |
 | `BambuDry.Core.Tests` | ✅ 25/25 passing | xUnit port of the XCTest suite, including `ams_report.json` verbatim. |
+| `BambuDry.App.Tests` | ✅ 17/17 passing | Storage round-trips, cross-platform schema, real Credential Manager round-trips. |
 | MQTTnet `LanTransport` | ✅ verified | Live-tested against P/X/A-series Bambu printers. |
-| Settings storage | ✅ shipping | `%APPDATA%\BambuDry\config.json` matches macOS schema field-for-field. |
-| Credential storage | ✅ shipping | Windows Credential Manager via `Meziantou.Framework.Win32.CredentialManager`, target name `dev.lcCode.BambuDry\<serial>`. |
-| Launch at login | ✅ shipping | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` registry write, controlled from the Advanced tab. |
-| Avalonia tray + dropdown | ✅ shipping | Borderless 380px popup, drag-by-header, anchored to the tray. State-driven tray icon (idle / warm / drying / offline). |
-| Per-AMS controls | ✅ shipping | Auto toggle, threshold sliders, manual Stop — all wired to per-unit settings, persisted with debounced disk writes. |
-| Tabbed Settings (Printer / Defaults / Advanced) | ✅ shipping | Includes editable defaults, dry-run toggle, launch-at-login toggle, recent-publishes log. |
-| Inno Setup installer | ✅ shipping | [`installer/BambuDry.iss`](installer/README.md) — per-user install by default, optional desktop / startup shortcuts. |
-| GitHub Actions CI | ✅ shipping | [`build-windows.yml`](../.github/workflows/build-windows.yml) — builds, tests, publishes, signs (Azure Trusted Signing), packages installer, attaches to rolling `latest-windows` pre-release on every push to `main`. |
-| Code signing | 🟡 pending Azure setup | Workflow integrates Azure Trusted Signing via OIDC. Builds proceed unsigned until the `AZURE_*` secrets are set. |
+| Settings storage | ✅ shipping | `%APPDATA%\BambuDry\config.json`. CamelCase + case-insensitive — the JSON file is interchangeable with the macOS app's. |
+| Credential storage | ✅ shipping | Windows Credential Manager via `Meziantou.Framework.Win32.CredentialManager`. Target `dev.lcCode.BambuDry\<serial>` mirrors the macOS Keychain shape. |
+| Launch at login | ✅ shipping | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, toggled from Settings → Advanced. |
+| Avalonia tray + dropdown | ✅ shipping | Borderless 380 px popup, drag-by-header, bottom-right anchor that grows upward as AMS rows arrive. State-driven tray icon (idle / warm / drying / offline). |
+| Pin / auto-hide | ✅ shipping | Mac-style: unpinned auto-hides on focus loss; pin keeps it open and remembers the dragged position across hide/show. |
+| Embedded setup form | ✅ shipping | First-run UX inlines the Add-printer form in the dropdown body, no separate dialog. |
+| Per-AMS controls | ✅ shipping | Auto toggle, threshold sliders, manual Stop — wired to per-unit settings (`Config.AmsSettings[<id>]`) with debounced 300 ms disk writes. |
+| Tabbed Settings (Printer / Defaults / Advanced) | ✅ shipping | Editable defaults, dry-run toggle, launch-at-login toggle, recent-publishes log (50-entry ring buffer of `Sent` + `DryRunSkipped` events). |
+| Inno Setup installer | ✅ shipping | [`installer/BambuDry.iss`](installer/README.md) — per-user install by default. End-to-end install/uninstall verified locally. ~32 MB compressed. |
+| GitHub Actions CI | ✅ shipping | [`build-windows.yml`](../.github/workflows/build-windows.yml) — builds, runs both test suites, publishes, signs (Azure Trusted Signing), packages installer, attaches to rolling `latest-windows` pre-release on every push to `main`. Tagged `v*` pushes also create a versioned release. |
+| Code signing | 🟡 pending Azure setup | Workflow integrates Azure Trusted Signing via OIDC federated credentials. Builds proceed unsigned (with a CI warning) until the `AZURE_*` secrets are populated. |
 
 ## Layout
 
@@ -39,15 +42,19 @@ windows/
 │   │   └── Control/              ← AutoDryController hysteresis, Orchestrator
 │   └── BambuDry.App/             ← Avalonia 11 desktop app
 │       ├── ViewModels/           ← AppViewModel, AmsRowViewModel, SettingsViewModel
-│       ├── Views/                ← MainWindow, PrinterSetupWindow, SettingsWindow
+│       ├── Views/                ← MainWindow, PrinterSetupView (UserControl), SettingsWindow
 │       ├── Storage/              ← AppConfig, ConfigStore, CredentialStore
 │       ├── Services/             ← LaunchAtLoginService
 │       └── Assets/               ← app.ico (multi-res) + tray-{state}.png
 └── tests/
-    └── BambuDry.Core.Tests/
-        ├── AutoDryControllerTests.cs   ← 13 tests, port of macOS suite
-        ├── MessagesTests.cs            ← 9 tests incl. fixture decode
-        └── Fixtures/ams_report.json    ← copied verbatim from macos/
+    ├── BambuDry.Core.Tests/      ← 25 cross-platform pure-logic tests
+    │   ├── AutoDryControllerTests.cs   ← 13 tests, port of macOS suite
+    │   ├── MessagesTests.cs            ← 9 tests incl. fixture decode
+    │   └── Fixtures/ams_report.json    ← copied verbatim from macos/
+    └── BambuDry.App.Tests/       ← 17 Windows-specific tests
+        ├── AppConfigTests.cs           ← JSON round-trip + macOS schema parse
+        ├── ConfigStoreTests.cs         ← Save/Load + corrupt-JSON recovery + atomic writes
+        └── CredentialStoreTests.cs     ← Win32 Credential Manager round-trip with cleanup
 ```
 
 ## Building locally
@@ -55,12 +62,11 @@ windows/
 ```powershell
 # from repo root
 dotnet build windows\BambuDry.sln
-dotnet test  windows\tests\BambuDry.Core.Tests
+dotnet test  windows\BambuDry.sln
 dotnet run   --project windows\src\BambuDry.App
 ```
 
-To build the signed installer the way CI does (requires Inno Setup 6+
-installed locally):
+To build the installer locally (requires [Inno Setup 6+](https://jrsoftware.org/isinfo.php)):
 
 ```powershell
 dotnet publish windows\src\BambuDry.App `
@@ -68,23 +74,33 @@ dotnet publish windows\src\BambuDry.App `
     -p:PublishSingleFile=false `
     -o windows\installer\publish
 
-& "C:\Program Files (x86)\Inno Setup 6\iscc.exe" `
+# iscc.exe lives under Program Files (x86) for system installs, or
+# %LOCALAPPDATA%\Programs\Inno Setup 6 for per-user installs.
+& "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" `
     /DMyAppVersion=0.1.0 `
     /DPublishDir=publish `
     windows\installer\BambuDry.iss
 
-# Output: windows\installer\output\BambuDry-0.1.0-Setup.exe
+# Output: windows\installer\output\BambuDry-0.1.0-Setup.exe (~32 MB)
 ```
 
 ## Cross-platform parity
 
-- Settings JSON schema matches macOS byte-for-byte (`printerName`, `serial`,
-  `lanIP`, `amsSettings: { "<id>": {...} }`, `defaultSettings`, `dryRunMode`,
-  `launchAtLogin`).
-- Credential record naming matches the macOS Keychain (`dev.lcCode.BambuDry`,
-  account = printer serial).
-- The 13 `AutoDryControllerTests` and 9 `MessagesTests` mirror their Swift
-  counterparts case-for-case, validating the same `ams_report.json` fixture.
+- **Wire protocol** — both apps target the same MQTT format documented in
+  [../docs/PROTOCOL.md](../docs/PROTOCOL.md). The 13 `AutoDryControllerTests`
+  and 9 `MessagesTests` mirror their Swift counterparts case-for-case and
+  validate against the same `ams_report.json` fixture.
+- **Settings JSON** — same schema (`printerName`, `serial`, `lanIP`,
+  `amsSettings: { "<id>": {...} }`, `defaultSettings`, plus Windows-only
+  `dryRunMode` / `launchAtLogin` that the Mac side ignores). CamelCase
+  keys + case-insensitive reads, so a `config.json` is interchangeable
+  between platforms.
+- **Credentials** — Win32 Credential Manager target name and account-key
+  shape (`dev.lcCode.BambuDry` / serial) mirrors the macOS Keychain.
+- **App icon** — `windows/src/BambuDry.App/Assets/app.ico` is built from
+  the macOS app's `Assets.xcassets/AppIcon.appiconset/` PNGs (see
+  [`scripts/generate-icons.ps1`](scripts/generate-icons.ps1)), so any
+  Mac-side art refresh propagates to Windows by re-running the script.
 
 ## Code signing
 
