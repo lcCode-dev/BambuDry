@@ -58,7 +58,7 @@ in [docs/PROTOCOL.md](docs/PROTOCOL.md).
 If BambuDry saves you a wet-filament print, you can buy me a coffee:
 
 - ☕ [Buy Me a Coffee](https://www.buymeacoffee.com/lccode)
-- 💖 [GitHub Sponsors](https://github.com/sponsors/lcCode-dev) (pending org verification)
+- 💖 [GitHub Sponsors](https://github.com/sponsors/lcCode-dev)
 
 Tips are appreciated but never required. The app is and will remain free.
 
