@@ -15,7 +15,7 @@ That's it.
 
 | Platform | Status | Download |
 |----------|--------|----------|
-| **macOS** (13 Ventura+) | Working | [Build from source](macos/README.md) |
+| **macOS** (13 Ventura+) | Working | [Download latest .dmg](https://github.com/lcCode-dev/BambuDry/releases/latest) or [build from source](macos/README.md) |
 | **Windows** (10/11) | Planned | — |
 
 The macOS version is a SwiftUI menu bar app, daily-driver tested against an

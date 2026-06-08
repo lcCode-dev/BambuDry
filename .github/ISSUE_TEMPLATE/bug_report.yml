@@ -1,0 +1,65 @@
+name: Bug report
+description: Report a reproducible BambuDry problem.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not paste printer serial numbers, LAN access codes, Bambu account details, public IPs, or unsanitized logs.
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed printer serial numbers, LAN access codes, account details, and sensitive network information.
+          required: true
+  - type: input
+    id: version
+    attributes:
+      label: BambuDry version
+      placeholder: v0.1.0 or commit SHA
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - macOS
+        - Windows planned port
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: printer
+    attributes:
+      label: Printer and AMS type
+      description: Model names only. Do not include serial numbers.
+      placeholder: P1S with AMS 2 Pro
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: What happened?
+      description: Describe the actual behavior and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Enable Developer Mode
+        2. Start BambuDry
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized logs or screenshots
+      description: Optional. Remove serials, access codes, account names, IPs, and hostnames first.
+      render: text
