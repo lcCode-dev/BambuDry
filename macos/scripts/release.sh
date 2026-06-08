@@ -83,7 +83,7 @@ xcodebuild \
     DEVELOPMENT_TEAM="$TEAM_ID" \
     CODE_SIGN_STYLE=Automatic \
     CODE_SIGN_IDENTITY="Developer ID Application" \
-    archive | xcbeautify || true
+    archive | xcbeautify
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 3. Export with Developer ID
@@ -110,7 +110,7 @@ xcodebuild \
     -exportArchive \
     -archivePath "$ARCHIVE_PATH" \
     -exportPath "$EXPORT_PATH" \
-    -exportOptionsPlist "$EXPORT_OPTS" | xcbeautify || true
+    -exportOptionsPlist "$EXPORT_OPTS" | xcbeautify
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 4. Notarize (requires internet; takes 1–10 minutes)
