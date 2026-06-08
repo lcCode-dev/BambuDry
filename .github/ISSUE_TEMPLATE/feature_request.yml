@@ -1,0 +1,30 @@
+name: Feature request
+description: Suggest an improvement or supported device workflow.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Keep requests public-safe. Do not include printer serial numbers, LAN access codes, Bambu account details, or unsanitized logs.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or workflow
+      description: What are you trying to do that BambuDry does not handle well today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the behavior you would like.
+    validations:
+      required: true
+  - type: input
+    id: hardware
+    attributes:
+      label: Relevant printer or AMS model
+      description: Model names only. Do not include serial numbers.
+      placeholder: X1C with AMS HT
