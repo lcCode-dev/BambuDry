@@ -64,12 +64,16 @@ Tips are appreciated but never required. The app is and will remain free.
 
 ## Contributing / issues
 
-Issues and PRs welcome. Two things to keep in mind:
+Issues and PRs are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the
+review and local-check workflow. Two things to keep in mind:
 
 1. **Don't paste your printer's serial or access code** in issue text or logs.
    Both can be used to control your printer over LAN.
 2. **Test fixtures should be sanitized** — see `macos/Tests/.../Fixtures/ams_report.json`
    for an example with placeholder values.
+
+For security-sensitive reports, use the process in [SECURITY.md](SECURITY.md)
+instead of opening a public issue.
 
 ## License
 
