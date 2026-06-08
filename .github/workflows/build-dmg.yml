@@ -51,7 +51,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
       - name: Verify required secrets are set
         env:
@@ -84,7 +84,7 @@ jobs:
         # the runner's pre-installed Xcode must be ≥ the one used locally.
         # `latest-stable` resolves to the newest non-beta Xcode the runner
         # has on disk, which tracks Apple releases as runner images update.
-        uses: maxim-lobanov/setup-xcode@v1
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90
         with:
           xcode-version: latest-stable
 
@@ -308,7 +308,7 @@ jobs:
         run: xcrun stapler validate "build/${{ steps.meta.outputs.dmg_name }}"
 
       - name: Upload .dmg as workflow artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: BambuDry-dmg
           path: ${{ steps.meta.outputs.dmg_path }}
@@ -347,7 +347,7 @@ jobs:
 
       - name: Update rolling 'Latest build' pre-release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
         with:
           tag_name: latest
           name: "Latest build (from main)"
@@ -366,7 +366,7 @@ jobs:
       # same .dmg to a permanent release with auto-generated notes.
       - name: Attach .dmg to versioned release (tag pushes only)
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
         with:
           files: ${{ steps.meta.outputs.dmg_path }}
           generate_release_notes: true
