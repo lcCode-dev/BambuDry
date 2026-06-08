@@ -104,9 +104,9 @@ depending on Apple's notary queue.
 - **One printer per app.** Data model supports multi-printer, UI doesn't.
 - **No auto-retry on connect failure.** If the printer reboots or Wi-Fi blips
   during initial connect, click Settings → Advanced → Reconnect.
-- **`swift test` fails locally** on Xcode 26.4 SDK due to a clang module-map
-  issue compiling CocoaMQTT's Obj-C dependency. Use `xcodebuild test` instead,
-  or test through the CLI / live app.
+- **SwiftPM needs writable cache directories.** In sandboxed environments,
+  `swift test` can fail before tests start if Swift cannot write its module
+  cache. In a normal shell, `swift test` is the supported package test command.
 - **Menu bar icon doesn't pulse while heating** — `MenuBarExtra`'s IPC layer
   to the system menu bar process can't sustain animation rates. Static red
   flame icon is what we landed on.
