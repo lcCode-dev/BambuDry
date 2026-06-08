@@ -51,7 +51,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
 
       - name: Verify required secrets are set
         env:
@@ -308,7 +308,7 @@ jobs:
         run: xcrun stapler validate "build/${{ steps.meta.outputs.dmg_name }}"
 
       - name: Upload .dmg as workflow artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: BambuDry-dmg
           path: ${{ steps.meta.outputs.dmg_path }}
@@ -347,7 +347,7 @@ jobs:
 
       - name: Update rolling 'Latest build' pre-release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda
         with:
           tag_name: latest
           name: "Latest build (from main)"
@@ -366,7 +366,7 @@ jobs:
       # same .dmg to a permanent release with auto-generated notes.
       - name: Attach .dmg to versioned release (tag pushes only)
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda
         with:
           files: ${{ steps.meta.outputs.dmg_path }}
           generate_release_notes: true
